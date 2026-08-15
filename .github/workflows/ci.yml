@@ -44,3 +44,7 @@ jobs:
           lgae-v3 qualify-lly --graph cycle --nodes 6
           lgae-v3 qualify-lly --graph path --nodes 4
           lgae-v3 qualify-lly --graph complete --nodes 4
+
+      - name: Verify integrity manifest
+        run: |
+          python scripts/generate_manifest.py --check

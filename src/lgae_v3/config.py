@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, fields
+from dataclasses import asdict, dataclass, field, fields
+import hashlib
+import json
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -214,3 +216,67 @@ def load_config(path: str | Path | None = None, overrides: Mapping[str, Any] | N
     if overrides:
         _update_dataclass(cfg, overrides)
     return validate_config(cfg)
+
+
+# ---------------------------------------------------------------------------
+# Config fingerprinting for checkpoint authority.
+#
+# The configuration is split into two fingerprints:
+#   - structural: dimensions and capacities that define the tensor shapes.
+#     A structural mismatch makes a checkpoint physically incompatible.
+#   - governance: audit thresholds and mutation policies that define semantics.
+#     A governance mismatch changes behavior and requires explicit migration.
+# ---------------------------------------------------------------------------
+
+_STRUCTURAL_FIELDS = {
+    "fiber": ("d_base", "d_max", "spawn_width", "gauge_dim", "gauge_parameterization"),
+    "operator": ("diagnostic_full_kernel_max_nodes",),
+    "compile": ("edge_bucket_size",),
+}
+
+_GOVERNANCE_FIELDS = {
+    "fiber": ("govern_mutations", "birth_penalty", "gate_l1_penalty", "inactive_penalty",
+              "score_threshold", "gamma_quantile", "persistence_steps", "min_age_for_death",
+              "utility_threshold", "ema_decay", "max_births_per_event", "max_deaths_per_event",
+              "birth_gate_logit", "base_gate_logit", "gauge_retraction_interval"),
+    "operator": ("diagnostic_k", "diagnostic_epsilon_floor", "self_loop", "symmetric_actuation",
+                 "operator_discrepancy"),
+    "audit": ("local_top_k", "orc_top_k", "orc_radii", "orc_backend", "sinkhorn_epsilon",
+              "sinkhorn_max_iter", "sinkhorn_tolerance", "exact_lly_top_k", "entropic_nodes",
+              "bakry_nodes", "cde_nodes", "cde_samples", "cde_dimension", "integral_lly_threshold",
+              "spectral_solver", "spectral_lobpcg_min_nodes", "spectral_lobpcg_niter",
+              "spectral_lobpcg_tol", "spectral_seed", "local_disconnect_gate",
+              "max_integral_lly_deficit", "min_lambda2", "max_operator_discrepancy",
+              "max_topology_drift", "max_cde_residual", "entropic_drop_tolerance",
+              "max_role_lly_deficit", "max_ph_drift", "preserve_beta0", "max_component_increase",
+              "entropic_require_success", "require_lly_crosscheck", "max_lly_crosscheck_error",
+              "persistent_homology_enabled", "require_persistent_homology",
+              "curvature_weight_mode", "role_lly_targets"),
+    "mutation": ("mutation_interval", "audit_interval", "shadow_steps", "shadow_eta",
+                 "max_edge_weight", "min_edge_weight", "edge_add_weight",
+                 "quarantine_on_uncertainty", "require_state_hash_match",
+                 "ricci_flow_dt", "ricci_target_curvature", "edge_cooldown_steps",
+                 "add_curvature_threshold", "deadband", "prune_curvature_threshold"),
+    "compile": ("enabled", "dynamic", "mode", "fullgraph", "backend", "isolate_recompiles"),
+}
+
+
+def _config_fingerprint(cfg: LGAEConfig, sections: dict[str, tuple[str, ...]]) -> str:
+    """Compute a SHA-256 fingerprint over selected config fields."""
+    payload: dict[str, Any] = {"seed": int(cfg.seed)}
+    for section_name, field_names in sections.items():
+        section = getattr(cfg, section_name)
+        section_dict = asdict(section)
+        payload[section_name] = {k: section_dict[k] for k in field_names if k in section_dict}
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def config_structural_hash(cfg: LGAEConfig) -> str:
+    """Fingerprint over structural config fields (dimensions, capacities, shapes)."""
+    return _config_fingerprint(cfg, _STRUCTURAL_FIELDS)
+
+
+def config_governance_hash(cfg: LGAEConfig) -> str:
+    """Fingerprint over governance config fields (audit thresholds, mutation policies)."""
+    return _config_fingerprint(cfg, _GOVERNANCE_FIELDS)

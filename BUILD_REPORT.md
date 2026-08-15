@@ -1,6 +1,6 @@
-# LGAE-v3.2 Geometric Hardening Build Report
+# LGAE-v3.3 Authority and Persistence Hardening Build Report
 
-Build: `3.2.0`
+Build: `3.3.0`
 
 Base: `lgae_v3_merged_hardened` v3.1.0.
 
@@ -44,17 +44,31 @@ Base: `lgae_v3_merged_hardened` v3.1.0.
    - in-place edge-buffer refresh after topology changes;
    - static-width fiber representation retained;
    - inactive fiber storage is forced to zero after diffusion so dormant channels cannot hide large latent values;
-   - monotonic slot generations (g_e) and optimizer-aware slot resets (m=0, v=0) prevent momentum leakage across slot retirements/reuses.
+   - monotonic slot generations (g_e) and optimizer-generic slot resets prevent momentum leakage across slot retirements/reuses.
+
+6. **v3.3 Authority and persistence hardening**
+   - canonical authority hash `H(G, g_e, U, F, C_g)` binds graph, gauge, fiber, and governance config;
+   - slot_generation is cryptographically committed in the graph state hash (schema V3);
+   - graph is the canonical generation authority; gauge bank syncs from graph at init, commit, and checkpoint boundaries;
+   - `assert_generation_sync()` verifies graph/gauge generation equality;
+   - checkpoint config enforcement: structural mismatch fails immediately, governance mismatch requires explicit `allow_governance_mismatch=True`;
+   - optimizer checkpoint semantics: `optimizer_load_policy` supports `"restore"`, `"reset"`, `"reject"`;
+   - safe checkpoint format: `safetensors + JSON` directory (no pickle, untrusted-safe);
+   - optimizer-generic slot reset: clears all tensor-valued state matching edge capacity (Adam, AdamW, SGD, Adagrad, RMSProp, etc.);
+   - hash-chained receipts with `H_i = SHA256(H_{i-1} || R_i)` and `verify_receipt_chain()`;
+   - receipts bind gauge authority hash at transaction boundary;
+   - exact manifest coverage with `scripts/generate_manifest.py --check`.
 
 ## Qualification
 
-- Pytest collection: **72 tests**.
-- Full test suite: **72/72 passed**.
+- Pytest collection: **93 tests**.
+- Full test suite: **93/93 passed**.
 - `scripts/qualify.py`: **PASS**.
 - Editable install with `--no-build-isolation`: **PASS**.
-- Installed CLI version/import check: **PASS** (`3.2.0`).
+- Installed CLI version/import check: **PASS** (`3.3.0`).
 - CPU Inductor fixed-shape compile smoke (`N=32,D=4,E=64`): **PASS**.
 - End-to-end CLI demo: **PASS**; candidate mutation reaches a governed `quarantine` decision rather than numerical failure.
+- Manifest verification: **PASS** (`scripts/generate_manifest.py --check`).
 
 Qualification includes:
 - `SO(d)` orthogonality and determinant invariants after real Adam optimizer steps;

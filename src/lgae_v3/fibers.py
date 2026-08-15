@@ -310,8 +310,26 @@ class SOConnectionBank(nn.Module):
         self,
         slot_ids: Tensor | list[int] | tuple[int, ...],
         optimizers: Any = None,
+        *,
+        sync_generation: Tensor | None = None,
     ) -> None:
-        """Reset Lie-algebra generators and optimizer state for retired/reassigned slots."""
+        """Reset Lie-algebra generators and optimizer state for retired/reassigned slots.
+
+        Parameters
+        ----------
+        slot_ids
+            Edge-slot indices to reset.
+        optimizers
+            Optimizer(s) whose per-slot state should be cleared. The reset is
+            optimizer-generic: every tensor-valued state entry whose leading
+            dimension matches ``edge_capacity`` is zeroed for the affected slots.
+            Scalar state entries (e.g. ``step`` counters) are preserved.
+        sync_generation
+            If provided, the gauge bank's ``slot_generation`` is set to match
+            this tensor for the affected slots rather than independently
+            incremented. This makes the graph the canonical generation
+            authority and prevents dual-authority drift.
+        """
         if not isinstance(slot_ids, Tensor):
             slot_ids = torch.as_tensor(slot_ids, dtype=torch.long, device=self.raw_generators.device)
         else:
@@ -326,10 +344,16 @@ class SOConnectionBank(nn.Module):
         if self.raw_generators.grad is not None:
             self.raw_generators.grad.index_fill_(0, slot_ids, 0.0)
 
-        # 3. Increment slot generation
-        self.slot_generation.index_add_(0, slot_ids, torch.ones_like(slot_ids))
+        # 3. Update slot generation: sync from canonical authority or increment
+        if sync_generation is not None:
+            self.slot_generation[slot_ids] = sync_generation[slot_ids].to(self.slot_generation.device)
+        else:
+            self.slot_generation.index_add_(0, slot_ids, torch.ones_like(slot_ids))
 
-        # 4. Clear optimizer state slices for the modified slots
+        # 4. Clear optimizer state slices for the modified slots.
+        # Optimizer-generic: zero every tensor-valued state whose leading
+        # dimension matches edge_capacity. Scalar states (step counters, etc.)
+        # are explicitly preserved.
         if optimizers is not None:
             opts = [optimizers] if not isinstance(optimizers, (list, tuple, set)) else list(optimizers)
             for opt in opts:
@@ -338,10 +362,11 @@ class SOConnectionBank(nn.Module):
                 param_state = opt.state.get(self.raw_generators)
                 if param_state is None:
                     continue
-                for key in ("exp_avg", "exp_avg_sq", "max_exp_avg_sq", "momentum_buffer"):
-                    buf = param_state.get(key)
-                    if isinstance(buf, Tensor) and buf.ndim >= 1 and buf.shape[0] == self.edge_capacity:
-                        buf.index_fill_(0, slot_ids.to(buf.device), 0.0)
+                for key, value in list(param_state.items()):
+                    if not isinstance(value, Tensor):
+                        continue
+                    if value.ndim >= 1 and value.shape[0] == self.edge_capacity:
+                        value.index_fill_(0, slot_ids.to(value.device), 0.0)
 
     @torch.no_grad()
     def retract_raw_(self) -> None:

@@ -1,13 +1,13 @@
 <div align="center">
 
-# LGAE-v3.2 / 1LR: Governed Adaptive Geometry Engine
+# LGAE-v3.3 / 1LR: Governed Adaptive Geometry Engine
 
 **A Multi-Timescale Geometric Controller for Self-Evolving Graph and Fiber-Bundle Latent Spaces**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.6+](https://img.shields.io/badge/PyTorch-2.6+-ee4c2c.svg)](https://pytorch.org/)
 [![CI Status](https://github.com/dawsonblock/1LR/actions/workflows/ci.yml/badge.svg)](https://github.com/dawsonblock/1LR/actions)
-[![Tests](https://img.shields.io/badge/tests-72%2F72%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-93%2F93%20passing-brightgreen.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Gauge: SO(d)](https://img.shields.io/badge/gauge-SO(d)%20Invariance-purple.svg)]()
 
@@ -17,7 +17,22 @@
 
 ## Overview
 
-**LGAE-v3.2 (`1LR`)** is a hardened geometric deep learning engine and dynamical controller. It operates over graph-structured data and continuous fiber bundles, combining continuous field diffusion, Lie-algebra gauge connections, discrete Ricci-flow surgery, and multi-operator curvature diagnostics.
+**LGAE-v3.3 (`1LR`)** is a hardened geometric deep learning engine and dynamical controller. It operates over graph-structured data and continuous fiber bundles, combining continuous field diffusion, Lie-algebra gauge connections, discrete Ricci-flow surgery, and multi-operator curvature diagnostics.
+
+### v3.3 — Authority and Persistence Hardening
+
+This release closes the state-authority gap identified in the v3.2 audit:
+
+- **Canonical authority hash** `H(G, g_e, U, F, C_g)` binds graph, gauge, fiber, and governance config into a single SHA-256 commitment.
+- **Slot-generation cryptographic binding**: `slot_generation` is now included in the graph state hash, preventing ABA-style slot reuse from going undetected.
+- **Graph/gauge generation synchronization**: the graph is the canonical generation authority; gauge bank generations sync from the graph at init, commit, and checkpoint boundaries.
+- **Checkpoint config enforcement**: structural config mismatch fails immediately; governance mismatch requires explicit `allow_governance_mismatch=True` migration flag.
+- **Optimizer checkpoint semantics**: `optimizer_load_policy` supports `"restore"`, `"reset"`, and `"reject"` — no more silent mixing of checkpoint parameters with stale optimizer history.
+- **Safe checkpoint format**: `safetensors + JSON` directory format for untrusted interchange (no pickle deserialization).
+- **Optimizer-generic slot reset**: clears all tensor-valued optimizer state matching edge capacity, not just Adam-specific keys (handles Adagrad, RMSProp, etc.).
+- **Hash-chained receipts**: tamper-evident ledger with `H_i = SHA256(H_{i-1} || R_i)` and `verify_receipt_chain()`.
+- **Receipts bind gauge authority**: accepted-mutation receipts now include `base_gauge_hash` and `authority_hash_after`.
+- **Exact manifest coverage**: `scripts/generate_manifest.py` with `--check` mode; `.gitignore` explicitly declared as excluded.
 
 ### Core Architecture Principle
 > **Field dynamics are sparse and compiled; discrete evolution is transactional and eager; curvature diagnoses rather than directly dictates topology.**
@@ -57,8 +72,8 @@
 ### 1. $\mathrm{SO}(d)$ Gauge Connection Bank (`SOConnectionBank`)
 * **Lie-Algebra Parameterization**: Generator parameters live in unconstrained space $R_e$, strictly mapped through the skew-symmetric algebra $\mathfrak{so}(d)$ via $A_e = \frac{1}{2}(R_e - R_e^T)$ and mapped to $\mathrm{SO}(d)$ via Cayley retraction or Matrix Exponential ($\exp(A_e)$).
 * **Guaranteed Invariance**: Connections strictly satisfy $U_e^T U_e = I$ and $\det(U_e) = +1$ to machine precision across arbitrary Euclidean optimizer steps.
-* **Slot Generation Lifecycle ($g_e$)**: Monotonic generation counters $(g_e \leftarrow g_e + 1)$ track slot allocation and retirement.
-* **Optimizer Momentum Isolation**: When an edge slot is retired or reused, its optimizer momentum slices (`exp_avg`, `exp_avg_sq`, `momentum_buffer`) are zeroed, eliminating historical gradient momentum leakage onto newly created connections.
+* **Slot Generation Lifecycle ($g_e$)**: Monotonic generation counters $(g_e \leftarrow g_e + 1)$ track slot allocation and retirement. Generations are cryptographically committed in the graph state hash and synchronized between graph and gauge authorities.
+* **Optimizer Momentum Isolation**: When an edge slot is retired or reused, all tensor-valued optimizer state slices whose leading dimension matches edge capacity are zeroed (optimizer-generic: handles Adam, AdamW, SGD, Adagrad, RMSProp, etc.). Scalar state (step counters) is preserved.
 
 ### 2. Stable Optimal Transport (Log-Sinkhorn Ollivier Curvature)
 * **Log-Domain Scaling**: Eliminates probability-space underflow at small entropic regularization $\epsilon$.
@@ -177,6 +192,49 @@ mutation = engine.propose_midpoint_edge()
 result = engine.evaluate_and_maybe_commit(mutation)
 print("Decision:", result.decision.value)  # 'accept', 'reject', or 'quarantine'
 print("Reasons:", result.reasons)
+print("Authority hash after:", result.metadata.get("authority_hash_after"))
+```
+
+### 4. Checkpoint Authority & Safe Persistence
+
+```python
+# Save in safe (safetensors + JSON) format for untrusted interchange
+engine.save_checkpoint("checkpoint_dir/")
+
+# Save in legacy pickle format (trusted local use only)
+engine.save_checkpoint("checkpoint.pt")
+
+# Load with config authority enforcement
+engine2.load_checkpoint_("checkpoint_dir/")
+
+# Load with explicit governance migration
+engine2.load_checkpoint_(
+    "checkpoint_dir/",
+    allow_governance_mismatch=True,
+    optimizer_load_policy="restore",  # "restore" | "reset" | "reject"
+)
+
+# Verify canonical authority hash
+print("Authority:", engine2.authority_hash())
+engine2.assert_generation_sync()  # raises on graph/gauge generation divergence
+```
+
+### 5. Hash-Chained Receipt Ledger
+
+```python
+from lgae_v3.receipts import mutation_receipt, append_receipt, verify_receipt_chain
+
+# Create and append a chained receipt
+receipt = mutation_receipt(
+    result,
+    authority_state_hash_before=engine.authority_hash(),
+    gauge_authority_hash=engine.gauge_connections.state_hash(),
+)
+append_receipt("ledger.jsonl", receipt)
+
+# Verify the entire chain is tamper-evident
+is_valid, errors = verify_receipt_chain("ledger.jsonl")
+assert is_valid
 ```
 
 ---
@@ -195,6 +253,10 @@ lgae-v3 demo --nodes 10 --steps 4
 
 # Cross-validate exact LLY curvature paths
 lgae-v3 qualify-lly --graph cycle --nodes 6
+
+# Generate or verify the SHA-256 integrity manifest
+python scripts/generate_manifest.py           # write manifest
+python scripts/generate_manifest.py --check   # verify manifest
 ```
 
 ---
@@ -248,7 +310,7 @@ lgae-v3 qualify-lly --graph cycle --nodes 6
 │   ├── operators.py          # Actuation & diagnostic Markov operators
 │   ├── receipts.py           # Cryptographic receipt logging
 │   └── topology.py           # NetworkX conversion, Betti numbers & PH
-└── tests/                    # 16 test modules with 72 verified unit/regression tests
+└── tests/                    # 17 test modules with 93 verified unit/regression tests
 ```
 
 ---

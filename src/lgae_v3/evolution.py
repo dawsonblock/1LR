@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
+import hashlib
+import json
 import random
 import networkx as nx
 import torch
 from torch import Tensor, nn
 
-from .config import LGAEConfig, validate_config
+from .config import LGAEConfig, config_governance_hash, config_structural_hash, validate_config
 from .fibers import FixedWidthFiberLatent, FiberController, FiberStateSnapshot, SOConnectionBank, directed_so_matrices
 from .governor import GeometryGovernor
 from .metrics import spawn_score_from_pressure
@@ -110,11 +113,51 @@ class LGAEEngine(nn.Module):
                 device=device or graph.weight.device, dtype=dtype,
             ) if self.cfg.fiber.gauge_dim > 0 else None
         )
+        # Graph is the canonical slot-generation authority. Sync gauge bank
+        # generations to match the graph at initialization so there is exactly
+        # one source of truth for slot lifecycle identity.
+        self._sync_generations()
         self.governor = GeometryGovernor(self.cfg)
         self.cooldowns = MutationCooldownTracker(self.cfg.mutation.edge_cooldown_steps)
         self.step_index = 0
         self.quarantine: list[QuarantineItem] = []
         self.optimizers: list[Any] = []
+
+    def _sync_generations(self) -> None:
+        """Copy graph slot_generation into gauge bank (graph is canonical authority)."""
+        if self.gauge_connections is not None and self.graph.slot_generation is not None:
+            self.gauge_connections.slot_generation.copy_(
+                self.graph.slot_generation.to(self.gauge_connections.slot_generation.device)
+            )
+
+    def assert_generation_sync(self) -> None:
+        """Verify graph and gauge slot generations are identical. Raises on mismatch."""
+        if self.gauge_connections is None or self.graph.slot_generation is None:
+            return
+        g = self.graph.slot_generation.to(self.gauge_connections.slot_generation.device)
+        if not bool(torch.equal(g, self.gauge_connections.slot_generation)):
+            raise RuntimeError(
+                "graph/gauge slot_generation divergence detected: "
+                f"graph={g.tolist()}, gauge={self.gauge_connections.slot_generation.tolist()}"
+            )
+
+    def authority_hash(self) -> str:
+        """Canonical state commitment H(G, g_e, U, F, C_g).
+
+        Combines graph state hash (which now includes slot generations), gauge
+        connection hash, fiber state hash, and governance config fingerprint
+        into a single SHA-256 commitment. This is the authoritative identity
+        that receipts and checkpoints bind to.
+        """
+        h = hashlib.sha256()
+        h.update(self.graph.state_hash().encode())
+        h.update(b"|gauge:")
+        h.update((self.gauge_connections.state_hash() if self.gauge_connections is not None else "none").encode())
+        h.update(b"|fiber:")
+        h.update(self.fibers.state_hash().encode())
+        h.update(b"|gov:")
+        h.update(config_governance_hash(self.cfg).encode())
+        return h.hexdigest()
 
     def register_optimizer(self, optimizer: Any) -> None:
         """Register an optimizer so slot resets also clear optimizer moment slices."""
@@ -253,6 +296,7 @@ class LGAEEngine(nn.Module):
             )
         base_hash = self.graph.state_hash()
         base_version = int(self.graph.version)
+        base_gauge_hash = None if self.gauge_connections is None else self.gauge_connections.state_hash()
         result, shadow = self.governor.evaluate_mutation(
             self.graph, self.fibers().detach(), mutation, seed=self.cfg.seed + self.step_index,
             gauge_bank=self.gauge_connections,
@@ -263,11 +307,21 @@ class LGAEEngine(nn.Module):
             self.cooldowns.record(mutation, self.step_index)
             if self.gauge_connections is not None:
                 reset = torch.where(old_valid != self.graph.valid)[0]
-                self.gauge_connections.reset_slots(reset, optimizers=self.optimizers)
+                # Graph is canonical generation authority: sync gauge generations
+                # from the graph rather than letting the gauge bank increment
+                # independently.
+                self.gauge_connections.reset_slots(
+                    reset, optimizers=self.optimizers,
+                    sync_generation=self.graph.slot_generation,
+                )
+            self.assert_generation_sync()
+            # Bind gauge authority hash into the accepted-mutation receipt metadata.
+            result.metadata["base_gauge_hash"] = base_gauge_hash
+            result.metadata["authority_hash_after"] = self.authority_hash()
         elif result.decision == MutationDecision.QUARANTINE:
             self.quarantine.append(QuarantineItem(
                 kind="graph", result=result, base_graph_version=base_version, base_graph_hash=base_hash,
-                base_gauge_hash=None if self.gauge_connections is None else self.gauge_connections.state_hash(),
+                base_gauge_hash=base_gauge_hash,
                 mutation_spec=mutation_to_spec(mutation), shadow_graph=shadow, created_step=int(self.step_index),
             ))
         return result
@@ -313,7 +367,12 @@ class LGAEEngine(nn.Module):
                 mutation = mutation_from_spec(item.mutation_spec)
                 self.cooldowns.record(mutation, self.step_index)
             if self.gauge_connections is not None:
-                self.gauge_connections.reset_slots(torch.where(old_valid != self.graph.valid)[0], optimizers=self.optimizers)
+                self.gauge_connections.reset_slots(
+                    torch.where(old_valid != self.graph.valid)[0],
+                    optimizers=self.optimizers,
+                    sync_generation=self.graph.slot_generation,
+                )
+            self.assert_generation_sync()
         elif item.kind == "fiber":
             if item.shadow_fibers is None:
                 raise RuntimeError("corrupt fiber quarantine item")
@@ -343,26 +402,300 @@ class LGAEEngine(nn.Module):
                 "created_step": q.created_step,
             })
         return {
-            "schema": "LGAE_V3_CHECKPOINT_V3",
-            "version": "3.2.0",
+            "schema": "LGAE_V3_CHECKPOINT_V4",
+            "version": "3.3.0",
             "config": asdict(self.cfg),
+            "config_structural_hash": config_structural_hash(self.cfg),
+            "config_governance_hash": config_governance_hash(self.cfg),
+            "authority_hash": self.authority_hash(),
             "step_index": int(self.step_index),
             "graph": self.graph.to_state_dict(),
             "model_state": {k: v.detach().cpu() for k, v in self.state_dict().items()},
+            "optimizer_state": self._optimizer_state_to_dict(),
             "cooldowns": self.cooldowns.to_state_dict(),
             "quarantine": qrows,
         }
 
+    def _optimizer_state_to_dict(self) -> dict:
+        """Serialize registered optimizer state for checkpoint persistence.
+
+        State is indexed by parameter position within the flattened param list
+        across all param_groups, so it can be restored into a fresh optimizer
+        with the same parameter structure without relying on ``id()``.
+        """
+        if not self.optimizers:
+            return {}
+        result: dict[str, Any] = {}
+        for i, opt in enumerate(self.optimizers):
+            all_params: list[Any] = []
+            for pg in opt.param_groups:
+                all_params.extend(pg["params"])
+            opt_state: dict[str, Any] = {"param_groups": [], "state": []}
+            for pg in opt.param_groups:
+                opt_state["param_groups"].append({
+                    "lr": float(pg.get("lr", 0.0)),
+                    "betas": tuple(float(b) for b in pg.get("betas", (0.9, 0.999))),
+                    "eps": float(pg.get("eps", 1e-8)),
+                    "weight_decay": float(pg.get("weight_decay", 0.0)),
+                    "momentum": float(pg.get("momentum", 0.0)),
+                })
+            for pos, param in enumerate(all_params):
+                state = opt.state.get(param)
+                if state is None:
+                    continue
+                state_dict: dict[str, Any] = {"param_pos": pos}
+                for key, value in state.items():
+                    if isinstance(value, Tensor):
+                        state_dict[key] = value.detach().cpu()
+                    elif isinstance(value, (int, float)):
+                        state_dict[key] = value
+                opt_state["state"].append(state_dict)
+            result[f"optimizer_{i}"] = opt_state
+        return result
+
+    def _restore_optimizer_state(self, opt_state: dict, optimizer: Any) -> None:
+        """Restore optimizer state from checkpoint dict using positional matching."""
+        if not opt_state or not hasattr(optimizer, "state"):
+            return
+        all_params: list[Any] = []
+        for pg in optimizer.param_groups:
+            all_params.extend(pg["params"])
+        for stored in opt_state.get("state", []):
+            pos = stored.get("param_pos")
+            if pos is None or pos >= len(all_params):
+                continue
+            param = all_params[pos]
+            for key, value in stored.items():
+                if key == "param_pos":
+                    continue
+                if isinstance(value, Tensor):
+                    optimizer.state[param][key] = value.to(device=param.device, dtype=param.dtype)
+                else:
+                    optimizer.state[param][key] = value
+
+    def _reset_registered_optimizers(self) -> None:
+        """Clear all state for registered optimizers (used when checkpoint lacks optimizer state)."""
+        for opt in self.optimizers:
+            if hasattr(opt, "state"):
+                for param in list(opt.state.keys()):
+                    opt.state[param].clear()
+                opt.state.clear()
+
     def save_checkpoint(self, path: str | Path) -> None:
+        """Save checkpoint.
+
+        If ``path`` ends with ``.pt``, uses the legacy pickle format (trusted
+        local use only). If ``path`` is a directory or ends with ``.ckpt/``,
+        uses the safe safetensors + JSON format suitable for untrusted
+        interchange.
+        """
         p = Path(path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(self.checkpoint_payload(), p)
+        if p.suffix == ".pt" or (p.is_file() and not p.is_dir()):
+            p.parent.mkdir(parents=True, exist_ok=True)
+            torch.save(self.checkpoint_payload(), p)
+        else:
+            self._save_checkpoint_safe(p)
+
+    def _save_checkpoint_safe(self, dir_path: Path) -> None:
+        """Save checkpoint in safetensors + JSON format (no pickle, untrusted-safe)."""
+        try:
+            from safetensors.torch import save_file
+        except ImportError as exc:
+            raise ImportError(
+                "safetensors is required for safe checkpoint format: pip install safetensors"
+            ) from exc
+        dir_path.mkdir(parents=True, exist_ok=True)
+        payload = self.checkpoint_payload()
+
+        # Collect all tensors into a flat dict for safetensors
+        tensors: dict[str, Tensor] = {}
+        tensors["graph.src"] = payload["graph"]["src"]
+        tensors["graph.dst"] = payload["graph"]["dst"]
+        tensors["graph.weight"] = payload["graph"]["weight"]
+        tensors["graph.valid"] = payload["graph"]["valid"]
+        tensors["graph.valid"] = tensors["graph.valid"].to(torch.uint8)
+        if payload["graph"].get("role") is not None:
+            tensors["graph.role"] = payload["graph"]["role"]
+        if payload["graph"].get("slot_generation") is not None:
+            tensors["graph.slot_generation"] = payload["graph"]["slot_generation"]
+        for k, v in payload["model_state"].items():
+            tensors[f"model.{k}"] = v
+
+        # Serialize optimizer tensor state
+        opt_state = payload.get("optimizer_state", {})
+        for opt_name, opt_data in opt_state.items():
+            for si, st in enumerate(opt_data.get("state", [])):
+                for key, value in st.items():
+                    if key == "param_id":
+                        continue
+                    if isinstance(value, Tensor):
+                        tensors[f"{opt_name}.state.{si}.{key}"] = value
+
+        save_file(tensors, str(dir_path / "tensors.safetensors"))
+
+        # JSON sidecar with non-tensor data
+        graph_json = {
+            "num_nodes": payload["graph"]["num_nodes"],
+            "version": payload["graph"]["version"],
+            "state_hash": payload["graph"]["state_hash"],
+            "has_role": payload["graph"].get("role") is not None,
+            "has_slot_generation": payload["graph"].get("slot_generation") is not None,
+        }
+        controller_json = {
+            "step_index": payload["step_index"],
+            "cooldowns": payload["cooldowns"],
+            "quarantine": [{
+                **{k: v for k, v in q.items() if k not in ("shadow_graph", "shadow_fibers")},
+                "shadow_graph_meta": None if q.get("shadow_graph") is None else {
+                    "num_nodes": q["shadow_graph"]["num_nodes"],
+                    "version": q["shadow_graph"]["version"],
+                    "state_hash": q["shadow_graph"]["state_hash"],
+                    "has_role": q["shadow_graph"].get("role") is not None,
+                    "has_slot_generation": q["shadow_graph"].get("slot_generation") is not None,
+                },
+                "shadow_fibers": q.get("shadow_fibers"),
+            } for q in payload["quarantine"]],
+            "optimizer_meta": {
+                name: {"param_groups": od["param_groups"], "state_meta": [
+                    {k: v for k, v in s.items() if not isinstance(v, Tensor)} for s in od.get("state", [])
+                ]} for name, od in opt_state.items()
+            },
+        }
+        governance_json = {
+            "config": payload["config"],
+            "config_structural_hash": payload["config_structural_hash"],
+            "config_governance_hash": payload["config_governance_hash"],
+            "authority_hash": payload["authority_hash"],
+        }
+        manifest = {
+            "schema": "LGAE_V3_SAFE_CHECKPOINT_V1",
+            "version": "3.3.0",
+            "files": ["tensors.safetensors", "graph.json", "controller.json", "governance.json"],
+            "tensor_keys": sorted(tensors.keys()),
+        }
+        (dir_path / "manifest.json").write_text(json.dumps(manifest, sort_keys=True, indent=2))
+        (dir_path / "graph.json").write_text(json.dumps(graph_json, sort_keys=True, indent=2, default=str))
+        (dir_path / "controller.json").write_text(json.dumps(controller_json, sort_keys=True, indent=2, default=str))
+        (dir_path / "governance.json").write_text(json.dumps(governance_json, sort_keys=True, indent=2, default=str))
 
     @torch.no_grad()
-    def load_checkpoint_(self, path: str | Path, *, map_location=None) -> None:
+    def load_checkpoint_(
+        self,
+        path: str | Path,
+        *,
+        map_location=None,
+        allow_governance_mismatch: bool = False,
+        optimizer_load_policy: str = "restore",
+    ) -> None:
+        """Load checkpoint with authority enforcement.
+
+        Parameters
+        ----------
+        path
+            Path to a ``.pt`` file (legacy pickle, trusted only) or a safe
+            checkpoint directory (safetensors + JSON).
+        map_location
+            Device mapping for tensor restoration.
+        allow_governance_mismatch
+            If False (default), a governance config mismatch raises
+            ``ValueError``. If True, the mismatch is accepted with a warning
+            in the returned metadata (explicit migration).
+        optimizer_load_policy
+            ``"restore"``: restore optimizer state from checkpoint (default).
+            ``"reset"``: clear all registered optimizer state.
+            ``"reject"``: raise if any optimizer is registered.
+        """
+        p = Path(path)
+        if p.is_dir() or str(path).endswith("/"):
+            self._load_checkpoint_safe_(
+                p, map_location=map_location,
+                allow_governance_mismatch=allow_governance_mismatch,
+                optimizer_load_policy=optimizer_load_policy,
+            )
+        else:
+            self._load_checkpoint_legacy_(
+                p, map_location=map_location,
+                allow_governance_mismatch=allow_governance_mismatch,
+                optimizer_load_policy=optimizer_load_policy,
+            )
+
+    def _enforce_config_authority(
+        self, payload_config: dict, payload_structural: str | None, payload_governance: str | None,
+        *, allow_governance_mismatch: bool,
+    ) -> None:
+        """Enforce structural and governance config fingerprints."""
+        from .config import LGAEConfig as _Cfg
+        # Reconstruct config from payload for hashing
+        saved_cfg = _Cfg()
+        from dataclasses import fields as _fields
+        for section_name in ("fiber", "operator", "audit", "mutation", "compile"):
+            section_data = payload_config.get(section_name, {})
+            section = getattr(saved_cfg, section_name)
+            for f in _fields(section):
+                if f.name in section_data:
+                    setattr(section, f.name, section_data[f.name])
+        saved_cfg.seed = int(payload_config.get("seed", 0))
+
+        current_structural = config_structural_hash(self.cfg)
+        current_governance = config_governance_hash(self.cfg)
+        saved_structural = payload_structural or config_structural_hash(saved_cfg)
+        saved_governance = payload_governance or config_governance_hash(saved_cfg)
+
+        if saved_structural != current_structural:
+            raise ValueError(
+                "checkpoint structural config mismatch: checkpoint and engine have "
+                "incompatible tensor shapes or dimensions. "
+                f"saved={saved_structural[:16]} current={current_structural[:16]}"
+            )
+        if saved_governance != current_governance and not allow_governance_mismatch:
+            raise ValueError(
+                "checkpoint governance config mismatch: the audit/mutation policy "
+                "differs between checkpoint and engine. Pass "
+                "allow_governance_mismatch=True to explicitly migrate. "
+                f"saved={saved_governance[:16]} current={current_governance[:16]}"
+            )
+
+    def _handle_optimizers_on_load(
+        self, payload_optimizer_state: dict | None, *, optimizer_load_policy: str,
+    ) -> None:
+        """Apply optimizer semantics during checkpoint load."""
+        if optimizer_load_policy not in ("restore", "reset", "reject"):
+            raise ValueError(f"invalid optimizer_load_policy: {optimizer_load_policy}")
+        if optimizer_load_policy == "reject" and self.optimizers:
+            raise RuntimeError(
+                "checkpoint load rejected because optimizers are registered "
+                "(optimizer_load_policy='reject')"
+            )
+        if not self.optimizers:
+            return
+        if optimizer_load_policy == "reset":
+            self._reset_registered_optimizers()
+            return
+        # restore
+        if payload_optimizer_state:
+            for i, opt in enumerate(self.optimizers):
+                opt_data = payload_optimizer_state.get(f"optimizer_{i}")
+                if opt_data:
+                    self._restore_optimizer_state(opt_data, opt)
+        else:
+            # Checkpoint has no optimizer state. Reset to avoid mixing
+            # checkpoint parameters with stale runtime optimizer history.
+            self._reset_registered_optimizers()
+
+    def _load_checkpoint_legacy_(
+        self, path: Path, *, map_location=None, allow_governance_mismatch: bool, optimizer_load_policy: str,
+    ) -> None:
         payload = torch.load(path, map_location=map_location or self.fibers.latent.device, weights_only=False)
-        if payload.get("schema") not in {"LGAE_V3_CHECKPOINT_V2", "LGAE_V3_CHECKPOINT_V3"}:
+        schema = payload.get("schema")
+        if schema not in {"LGAE_V3_CHECKPOINT_V2", "LGAE_V3_CHECKPOINT_V3", "LGAE_V3_CHECKPOINT_V4"}:
             raise ValueError("unsupported checkpoint schema")
+        # V2/V3 checkpoints predate config authority enforcement; only enforce for V4.
+        if schema == "LGAE_V3_CHECKPOINT_V4":
+            self._enforce_config_authority(
+                payload["config"], payload.get("config_structural_hash"),
+                payload.get("config_governance_hash"),
+                allow_governance_mismatch=allow_governance_mismatch,
+            )
         graph = GraphBuffers.from_state_dict(payload["graph"], device=self.fibers.latent.device)
         if graph.num_nodes != self.graph.num_nodes:
             raise ValueError("checkpoint node count does not match engine")
@@ -384,3 +717,105 @@ class LGAEEngine(nn.Module):
                 shadow_fibers=_fiber_snapshot_from_dict(row.get("shadow_fibers"), device=self.fibers.latent.device),
                 created_step=int(row.get("created_step", 0)),
             ))
+        # Sync gauge generations from graph (canonical authority)
+        self._sync_generations()
+        # Handle optimizer state
+        opt_state = payload.get("optimizer_state") if schema == "LGAE_V3_CHECKPOINT_V4" else None
+        self._handle_optimizers_on_load(opt_state, optimizer_load_policy=optimizer_load_policy)
+
+    def _load_checkpoint_safe_(
+        self, dir_path: Path, *, map_location=None, allow_governance_mismatch: bool, optimizer_load_policy: str,
+    ) -> None:
+        try:
+            from safetensors.torch import load_file as _load_safetensors
+        except ImportError as exc:
+            raise ImportError(
+                "safetensors is required for safe checkpoint format: pip install safetensors"
+            ) from exc
+        manifest = json.loads((dir_path / "manifest.json").read_text())
+        if manifest.get("schema") != "LGAE_V3_SAFE_CHECKPOINT_V1":
+            raise ValueError("unsupported safe checkpoint schema")
+        governance = json.loads((dir_path / "governance.json").read_text())
+        self._enforce_config_authority(
+            governance["config"], governance.get("config_structural_hash"),
+            governance.get("config_governance_hash"),
+            allow_governance_mismatch=allow_governance_mismatch,
+        )
+        graph_meta = json.loads((dir_path / "graph.json").read_text())
+        controller = json.loads((dir_path / "controller.json").read_text())
+        tensors = _load_safetensors(str(dir_path / "tensors.safetensors"))
+        device = map_location or self.fibers.latent.device
+
+        # Reconstruct graph
+        graph_payload = {
+            "num_nodes": graph_meta["num_nodes"],
+            "src": tensors["graph.src"].to(device=device, dtype=torch.long),
+            "dst": tensors["graph.dst"].to(device=device, dtype=torch.long),
+            "weight": tensors["graph.weight"].to(device=device),
+            "valid": tensors["graph.valid"].to(device=device, dtype=torch.bool),
+            "role": tensors.get("graph.role"),
+            "slot_generation": tensors.get("graph.slot_generation"),
+            "version": graph_meta["version"],
+            "state_hash": graph_meta["state_hash"],
+        }
+        graph = GraphBuffers.from_state_dict(graph_payload, device=device)
+        if graph.num_nodes != self.graph.num_nodes:
+            raise ValueError("checkpoint node count does not match engine")
+        self.graph = graph
+
+        # Reconstruct model state
+        model_state = {}
+        prefix = "model."
+        for k, v in tensors.items():
+            if k.startswith(prefix):
+                model_state[k[len(prefix):]] = v.to(device=device)
+        self.load_state_dict(model_state, strict=True)
+        self.step_index = int(controller["step_index"])
+        self.cooldowns = MutationCooldownTracker.from_state_dict(controller.get("cooldowns", {"cooldown_steps": self.cfg.mutation.edge_cooldown_steps}))
+        self.quarantine.clear()
+        # Note: safe format stores quarantine shadow graphs as metadata only;
+        # full shadow graph tensors are not preserved in the safe format.
+        for row in controller.get("quarantine", []):
+            self.quarantine.append(QuarantineItem(
+                kind=row["kind"],
+                result=_result_from_dict(row["result"]),
+                base_graph_version=int(row["base_graph_version"]),
+                base_graph_hash=row["base_graph_hash"],
+                base_fiber_hash=row.get("base_fiber_hash"),
+                base_gauge_hash=row.get("base_gauge_hash"),
+                mutation_spec=row.get("mutation_spec"),
+                shadow_graph=None,  # safe format does not serialize shadow graph tensors
+                shadow_fibers=_fiber_snapshot_from_dict(row.get("shadow_fibers"), device=device),
+                created_step=int(row.get("created_step", 0)),
+            ))
+        self._sync_generations()
+        # Reconstruct optimizer state from safetensors
+        opt_state: dict[str, Any] = {}
+        opt_meta = controller.get("optimizer_meta", {})
+        for opt_name, opt_data_meta in opt_meta.items():
+            opt_state[opt_name] = {"param_groups": opt_data_meta["param_groups"], "state": []}
+        # Find optimizer state tensors in the safetensors file
+        for opt_name in opt_meta:
+            prefix = f"{opt_name}.state."
+            state_list: list[dict] = []
+            indices: set[int] = set()
+            for k in tensors:
+                if k.startswith(prefix):
+                    parts = k[len(prefix):].split(".", 1)
+                    if parts:
+                        indices.add(int(parts[0]))
+            for si in sorted(indices):
+                st: dict[str, Any] = {}
+                for k, v in tensors.items():
+                    if k.startswith(f"{prefix}{si}."):
+                        key = k[len(f"{prefix}{si}."):]
+                        st[key] = v.to(device=device)
+                # Add non-tensor meta (param_id, step)
+                for sm in opt_meta[opt_name].get("state_meta", []):
+                    if sm.get("param_id") is not None and not any(
+                        k == "param_id" for k in st
+                    ):
+                        st["param_id"] = sm["param_id"]
+                state_list.append(st)
+            opt_state[opt_name]["state"] = state_list
+        self._handle_optimizers_on_load(opt_state if opt_state else None, optimizer_load_policy=optimizer_load_policy)

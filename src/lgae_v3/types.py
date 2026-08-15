@@ -157,15 +157,26 @@ class GraphBuffers:
         self.version = int(self.version) + 1
 
     def state_hash(self, *, include_version: bool = True) -> str:
+        """Canonical state commitment over active edge rows.
+
+        Each canonical edge row commits (slot_index, slot_generation, u, v, weight, role)
+        so that slot-generation metadata is cryptographically bound. Altering
+        ``slot_generation`` without a corresponding edge identity change produces a
+        different hash, preventing ABA-style slot reuse from going undetected.
+        """
         src, dst, weight = self.active()
         roles = self.active_roles()
+        active_ids = torch.where(self.valid)[0]
         rows = []
-        for u, v, w, role in zip(src.tolist(), dst.tolist(), weight.tolist(), roles.tolist()):
+        for slot, u, v, w, role in zip(
+            active_ids.tolist(), src.tolist(), dst.tolist(), weight.tolist(), roles.tolist()
+        ):
             a, b = sorted((int(u), int(v)))
-            rows.append((a, b, float(w), int(role)))
+            g = int(self.slot_generation[int(slot)].item()) if self.slot_generation is not None else 0
+            rows.append((int(slot), g, a, b, float(w), int(role)))
         rows.sort()
         payload = {
-            "schema": "LGAE_GRAPH_STATE_V2",
+            "schema": "LGAE_GRAPH_STATE_V3",
             "num_nodes": int(self.num_nodes),
             "edges": rows,
         }
