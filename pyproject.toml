@@ -34,3 +34,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+filterwarnings = [
+  "error",
+  "ignore:.*Sparse invariant checks.*:UserWarning",
+]

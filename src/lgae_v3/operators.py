@@ -229,7 +229,7 @@ def symmetric_normalized_laplacian_sparse(graph: GraphBuffers, eps: float = 1e-1
     row = torch.cat([ids, src, dst])
     col = torch.cat([ids, dst, src])
     val = torch.cat([torch.ones(n, dtype=w.dtype, device=w.device), -norm_w, -norm_w])
-    return torch.sparse_coo_tensor(torch.stack([row, col]), val, (n, n), device=w.device, dtype=w.dtype).coalesce()
+    return torch.sparse_coo_tensor(torch.stack([row, col]), val, (n, n), device=w.device, dtype=w.dtype, check_invariants=False).coalesce()
 
 
 def spectral_gap_graphbuffers(

@@ -68,8 +68,8 @@
     },
     {
       "path": "pyproject.toml",
-      "bytes": 777,
-      "sha256": "986a6fba802b35165ff19677c5aaf804555ad5e2cbe379d84edcd9cca4c33626"
+      "bytes": 861,
+      "sha256": "0d81bb70d6dcef32cd0e38d3f40c172aa6d7f4c914fe17e8de6992d28622bff9"
     },
     {
       "path": "qualification_report.json",
@@ -218,8 +218,8 @@
     },
     {
       "path": "src/lgae_v3/operators.py",
-      "bytes": 14515,
-      "sha256": "1a1c4f5fa82309cd9cd5d2eb777884c947960ef8917debc308c1d5e1e3191bc6"
+      "bytes": 14539,
+      "sha256": "b97bb9895ad93ec609fcce6b610900387ec32368911b59e193edbac8e0f19a88"
     },
     {
       "path": "src/lgae_v3/receipts.py",
