@@ -1,6 +1,6 @@
-# LGAE-v4.1 Metric–Measure Separation Build Report
+# LGAE-v4.1.1 Sparse Governance Integrity Build Report
 
-Build: `4.1.0`
+Build: `4.1.1`
 
 Base: `lgae_v3_merged_hardened` v3.1.0.
 
@@ -88,14 +88,26 @@ Base: `lgae_v3_merged_hardened` v3.1.0.
 
 ## Qualification
 
-- Pytest collection: **142 tests**.
-- Full test suite: **142/142 passed**.
+- Pytest collection: **162 tests**.
+- Full test suite: **162/162 passed**.
 - `scripts/qualify.py`: **PASS**.
 - Editable install with `--no-build-isolation`: **PASS**.
-- Installed CLI version/import check: **PASS** (`4.1.0`).
+- Installed CLI version/import check: **PASS** (`4.1.1`).
 - CPU Inductor fixed-shape compile smoke (`N=32,D=4,E=64`): **PASS**.
 - End-to-end CLI demo: **PASS**; candidate mutation reaches a governed `quarantine` decision rather than numerical failure.
 - Manifest verification: **PASS** (`scripts/generate_manifest.py --check`).
+
+### v4.1.1 fixes
+
+- **P0-1**: Sparse governor works for N>2048 (local BE/CDE extraction)
+- **P0-2**: Sparse discrepancy coalesces duplicate COO edges via `torch.sparse_coo_tensor.coalesce()`
+- **P0-3**: Safe checkpoint persists `length` tensor alongside `weight`
+- **P0-4**: Governance hash includes `shadow_horizons`, `ricci_flow_target`, `ricci_flow_coupled`
+- **P0-5**: RicciFlow serialization preserves `target_field` and `coupled`
+- **P1-1**: Multi-horizon uses max severity aggregation (QUARANTINE propagates)
+- **P1-2**: Safe checkpoint persists complete shadow graphs for durable quarantine
+- **P1-3**: Weighted Forman uses metric-measure formula (m₁, m₂, ω)
+- **P2-1**: Single `version.py` module for all version identity
 
 Qualification includes:
 - `SO(d)` orthogonality and determinant invariants after real Adam optimizer steps;

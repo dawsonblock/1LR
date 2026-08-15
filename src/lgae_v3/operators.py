@@ -328,59 +328,37 @@ def sparse_operator_discrepancy(
     """Compute operator discrepancy on sparse edge supports.
 
     Builds the difference P_act - P_diag only on the union of supports,
-    avoiding a full N×N matrix. The Frobenius norm is computed as the
-    square root of the sum of squared differences over the union support.
+    avoiding a full N×N matrix. Uses ``torch.sparse_coo_tensor.coalesce()``
+    to correctly accumulate duplicate directed edges (e.g. from mutual k-NN
+    symmetrization) before comparison.
 
     Memory: O(|E_act| + |E_diag|) instead of O(N²).
     """
-    # Build a sparse representation of P_act and P_diag
-    # P_act[i,j] = act_weight for each (act_src, act_dst) edge
-    # P_diag[i,j] = diag_weight for each (diag_src, diag_dst) edge
+    # Build coalesced sparse tensors for both operators
+    act_indices = torch.stack([act_src.to(torch.long), act_dst.to(torch.long)], dim=0)
+    diag_indices = torch.stack([diag_src.to(torch.long), diag_dst.to(torch.long)], dim=0)
 
-    # Create index keys for fast lookup
-    act_key = act_src * num_nodes + act_dst
-    diag_key = diag_src * num_nodes + diag_dst
+    P_act_sp = torch.sparse_coo_tensor(
+        act_indices, act_weight, size=(num_nodes, num_nodes),
+    ).coalesce()
 
-    # Build dictionaries via scatter: for each (i,j) pair, get the weight
-    # We use a hash-map approach via torch indexing
-    # Sort both edge lists and merge
+    P_diag_sp = torch.sparse_coo_tensor(
+        diag_indices, diag_weight, size=(num_nodes, num_nodes),
+    ).coalesce()
 
-    act_order = torch.argsort(act_key)
-    diag_order = torch.argsort(diag_key)
-    act_key_sorted = act_key[act_order]
-    diag_key_sorted = diag_key[diag_order]
-
-    # Merge the two sorted key lists to find union support
-    all_keys = torch.cat([act_key_sorted, diag_key_sorted])
-    all_order = torch.argsort(all_keys)
-    all_keys_sorted = all_keys[all_order]
-
-    # For each unique key, get act_weight and diag_weight (0 if absent)
-    # Use searchsorted to find positions
-    act_pos = torch.searchsorted(act_key_sorted, all_keys_sorted)
-    diag_pos = torch.searchsorted(diag_key_sorted, all_keys_sorted)
-
-    # Clamp positions to valid range
-    act_pos = act_pos.clamp(max=len(act_key_sorted) - 1)
-    diag_pos = diag_pos.clamp(max=len(diag_key_sorted) - 1)
-
-    # Check if keys actually match
-    act_match = act_key_sorted[act_pos] == all_keys_sorted
-    diag_match = diag_key_sorted[diag_pos] == all_keys_sorted
-
-    # Gather weights (0 where no match)
-    act_w = torch.where(act_match, act_weight[act_order[act_pos]], torch.zeros_like(act_weight[0:1]))
-    diag_w = torch.where(diag_match, diag_weight[diag_order[diag_pos]], torch.zeros_like(diag_weight[0:1]))
-
-    diff = act_w - diag_w
+    # Build the difference by concatenating indices and values
+    # P_act - P_diag: act entries get +weight, diag entries get -weight
+    diff_indices = torch.cat([P_act_sp.indices(), P_diag_sp.indices()], dim=1)
+    diff_values = torch.cat([P_act_sp.values(), -P_diag_sp.values()])
+    delta = torch.sparse_coo_tensor(
+        diff_indices, diff_values, size=(num_nodes, num_nodes),
+    ).coalesce()
 
     if mode == "frobenius":
         # ||P_act - P_diag||_F / sqrt(N)
-        return torch.sqrt((diff * diff).sum().clamp_min(0.0)) / max(num_nodes, 1) ** 0.5
+        return torch.sqrt((delta.values() ** 2).sum().clamp_min(0.0)) / max(num_nodes, 1) ** 0.5
     if mode == "mean_l1":
-        # mean over rows of |diff| sum
-        # Approximate: total L1 / N
-        return diff.abs().sum() / max(num_nodes, 1)
+        return delta.values().abs().sum() / max(num_nodes, 1)
     raise ValueError(f"unknown discrepancy mode: {mode}")
 
 
@@ -443,6 +421,69 @@ class SparseDualOperatorState:
         p_diag = torch.zeros((n, n), dtype=self.diag_weight.dtype, device=self.diag_weight.device)
         p_diag.index_put_((self.diag_src, self.diag_dst), self.diag_weight, accumulate=True)
         return DualOperatorState(p_act, p_diag)
+
+    @property
+    def p_diagnostic(self) -> Tensor:
+        """Materialize the full dense diagnostic operator.
+
+        WARNING: This allocates O(N²) memory. Only use for small N or testing.
+        For large N, use ``local_dense_diagnostic`` instead.
+        """
+        return self.to_dense().p_diagnostic
+
+    @property
+    def p_actuation(self) -> Tensor:
+        """Materialize the full dense actuation operator.
+
+        WARNING: This allocates O(N²) memory. Only use for small N or testing.
+        """
+        return self.to_dense().p_actuation
+
+    def local_dense_diagnostic(self, center_nodes: Tensor, radius: int = 2) -> tuple[Tensor, Tensor]:
+        """Extract a local dense diagnostic operator for selected center nodes.
+
+        For each center node, extracts the 2-hop neighborhood from the sparse
+        diagnostic graph and materializes only that local submatrix. This is
+        the key scaling mechanism: BE/CDE complexity depends on local degree,
+        not global N.
+
+        Returns (local_P, node_indices) where:
+        - local_P is a block-diagonal-ish dense matrix over the union of neighborhoods
+        - node_indices is the mapping from local indices to global node IDs
+        """
+        device = self.diag_src.device
+        dtype = self.diag_weight.dtype
+
+        # Build adjacency sets from sparse diagnostic edges
+        nbrs: dict[int, set[int]] = {i: set() for i in range(self.num_nodes)}
+        for s, d in zip(self.diag_src.tolist(), self.diag_dst.tolist()):
+            nbrs[s].add(d)
+
+        # BFS to radius hops from each center node
+        selected: set[int] = set()
+        for c in center_nodes.tolist():
+            frontier = {int(c)}
+            for _ in range(radius):
+                next_frontier: set[int] = set()
+                for node in frontier:
+                    next_frontier.update(nbrs.get(node, set()))
+                selected.update(frontier)
+                frontier = next_frontier
+            selected.update(frontier)
+
+        sorted_nodes = sorted(selected)
+        idx_map = {g: i for i, g in enumerate(sorted_nodes)}
+        n_local = len(sorted_nodes)
+        if n_local == 0:
+            return torch.zeros((0, 0), dtype=dtype, device=device), torch.tensor([], dtype=torch.long, device=device)
+
+        # Build local dense matrix from sparse edges
+        local_P = torch.zeros((n_local, n_local), dtype=dtype, device=device)
+        for s, d, w in zip(self.diag_src.tolist(), self.diag_dst.tolist(), self.diag_weight.tolist()):
+            if s in idx_map and d in idx_map:
+                local_P[idx_map[s], idx_map[d]] += w
+
+        return local_P, torch.tensor(sorted_nodes, dtype=torch.long, device=device)
 
 
 def spectral_gap_symmetric(p: Tensor) -> Tensor:

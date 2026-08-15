@@ -18,6 +18,7 @@ from .mutations import AddEdge, RicciFlowReweight, MutationCooldownTracker, muta
 from .operators import actuation_markov_edges, sparse_laplacian_step, actuation_markov_edges_with_slots, sparse_laplacian_step_gauge
 from .topology import graphbuffers_to_networkx
 from .types import AuditSnapshot, GraphBuffers, MutationDecision, MutationResult
+from .version import VERSION as __version__
 
 
 @dataclass(slots=True)
@@ -405,6 +406,7 @@ class LGAEEngine(nn.Module):
             })
         return {
             "schema": "LGAE_V3_CHECKPOINT_V4",
+            "version": __version__,
             "version": "3.3.0",
             "config": asdict(self.cfg),
             "config_structural_hash": config_structural_hash(self.cfg),
@@ -516,6 +518,8 @@ class LGAEEngine(nn.Module):
         tensors["graph.weight"] = payload["graph"]["weight"]
         tensors["graph.valid"] = payload["graph"]["valid"]
         tensors["graph.valid"] = tensors["graph.valid"].to(torch.uint8)
+        if payload["graph"].get("length") is not None:
+            tensors["graph.length"] = payload["graph"]["length"]
         if payload["graph"].get("role") is not None:
             tensors["graph.role"] = payload["graph"]["role"]
         if payload["graph"].get("slot_generation") is not None:
@@ -533,6 +537,21 @@ class LGAEEngine(nn.Module):
                     if isinstance(value, Tensor):
                         tensors[f"{opt_name}.state.{si}.{key}"] = value
 
+        # Persist quarantined shadow graph tensors for durable quarantine
+        for qi, q in enumerate(payload.get("quarantine", [])):
+            sg = q.get("shadow_graph")
+            if sg is not None:
+                tensors[f"quarantine.{qi}.shadow_graph.src"] = sg["src"]
+                tensors[f"quarantine.{qi}.shadow_graph.dst"] = sg["dst"]
+                tensors[f"quarantine.{qi}.shadow_graph.weight"] = sg["weight"]
+                if sg.get("length") is not None:
+                    tensors[f"quarantine.{qi}.shadow_graph.length"] = sg["length"]
+                tensors[f"quarantine.{qi}.shadow_graph.valid"] = sg["valid"].to(torch.uint8)
+                if sg.get("role") is not None:
+                    tensors[f"quarantine.{qi}.shadow_graph.role"] = sg["role"]
+                if sg.get("slot_generation") is not None:
+                    tensors[f"quarantine.{qi}.shadow_graph.slot_generation"] = sg["slot_generation"]
+
         save_file(tensors, str(dir_path / "tensors.safetensors"))
 
         # JSON sidecar with non-tensor data
@@ -542,6 +561,7 @@ class LGAEEngine(nn.Module):
             "state_hash": payload["graph"]["state_hash"],
             "has_role": payload["graph"].get("role") is not None,
             "has_slot_generation": payload["graph"].get("slot_generation") is not None,
+            "has_length": payload["graph"].get("length") is not None,
         }
         controller_json = {
             "step_index": payload["step_index"],
@@ -554,6 +574,7 @@ class LGAEEngine(nn.Module):
                     "state_hash": q["shadow_graph"]["state_hash"],
                     "has_role": q["shadow_graph"].get("role") is not None,
                     "has_slot_generation": q["shadow_graph"].get("slot_generation") is not None,
+                    "has_length": q["shadow_graph"].get("length") is not None,
                 },
                 "shadow_fibers": q.get("shadow_fibers"),
             } for q in payload["quarantine"]],
@@ -570,8 +591,8 @@ class LGAEEngine(nn.Module):
             "authority_hash": payload["authority_hash"],
         }
         manifest = {
-            "schema": "LGAE_V3_SAFE_CHECKPOINT_V1",
-            "version": "3.3.0",
+            "schema": "LGAE_V3_SAFE_CHECKPOINT_V2",
+            "version": __version__,
             "files": ["tensors.safetensors", "graph.json", "controller.json", "governance.json"],
             "tensor_keys": sorted(tensors.keys()),
         }
@@ -735,7 +756,7 @@ class LGAEEngine(nn.Module):
                 "safetensors is required for safe checkpoint format: pip install safetensors"
             ) from exc
         manifest = json.loads((dir_path / "manifest.json").read_text())
-        if manifest.get("schema") != "LGAE_V3_SAFE_CHECKPOINT_V1":
+        if manifest.get("schema") not in ("LGAE_V3_SAFE_CHECKPOINT_V1", "LGAE_V3_SAFE_CHECKPOINT_V2"):
             raise ValueError("unsupported safe checkpoint schema")
         governance = json.loads((dir_path / "governance.json").read_text())
         self._enforce_config_authority(
@@ -755,6 +776,7 @@ class LGAEEngine(nn.Module):
             "dst": tensors["graph.dst"].to(device=device, dtype=torch.long),
             "weight": tensors["graph.weight"].to(device=device),
             "valid": tensors["graph.valid"].to(device=device, dtype=torch.bool),
+            "length": tensors.get("graph.length"),
             "role": tensors.get("graph.role"),
             "slot_generation": tensors.get("graph.slot_generation"),
             "version": graph_meta["version"],
@@ -775,9 +797,26 @@ class LGAEEngine(nn.Module):
         self.step_index = int(controller["step_index"])
         self.cooldowns = MutationCooldownTracker.from_state_dict(controller.get("cooldowns", {"cooldown_steps": self.cfg.mutation.edge_cooldown_steps}))
         self.quarantine.clear()
-        # Note: safe format stores quarantine shadow graphs as metadata only;
-        # full shadow graph tensors are not preserved in the safe format.
-        for row in controller.get("quarantine", []):
+        # Reconstruct quarantined items with full shadow graphs from safetensors
+        for qi, row in enumerate(controller.get("quarantine", [])):
+            sg_meta = row.get("shadow_graph_meta")
+            shadow_graph = None
+            if sg_meta is not None:
+                # Reconstruct shadow graph from safetensors
+                sg_prefix = f"quarantine.{qi}.shadow_graph."
+                sg_payload = {
+                    "num_nodes": sg_meta["num_nodes"],
+                    "src": tensors[sg_prefix + "src"].to(device=device, dtype=torch.long),
+                    "dst": tensors[sg_prefix + "dst"].to(device=device, dtype=torch.long),
+                    "weight": tensors[sg_prefix + "weight"].to(device=device),
+                    "valid": tensors[sg_prefix + "valid"].to(device=device, dtype=torch.bool),
+                    "length": tensors.get(sg_prefix + "length"),
+                    "role": tensors.get(sg_prefix + "role"),
+                    "slot_generation": tensors.get(sg_prefix + "slot_generation"),
+                    "version": sg_meta["version"],
+                    "state_hash": sg_meta["state_hash"],
+                }
+                shadow_graph = GraphBuffers.from_state_dict(sg_payload, device=device)
             self.quarantine.append(QuarantineItem(
                 kind=row["kind"],
                 result=_result_from_dict(row["result"]),
@@ -786,7 +825,7 @@ class LGAEEngine(nn.Module):
                 base_fiber_hash=row.get("base_fiber_hash"),
                 base_gauge_hash=row.get("base_gauge_hash"),
                 mutation_spec=row.get("mutation_spec"),
-                shadow_graph=None,  # safe format does not serialize shadow graph tensors
+                shadow_graph=shadow_graph,
                 shadow_fibers=_fiber_snapshot_from_dict(row.get("shadow_fibers"), device=device),
                 created_step=int(row.get("created_step", 0)),
             ))

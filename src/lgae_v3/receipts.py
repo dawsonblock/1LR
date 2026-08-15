@@ -5,6 +5,8 @@ import hashlib, json
 from pathlib import Path
 from typing import Any
 
+from .version import VERSION
+
 
 def _safe(x: Any):
     if is_dataclass(x): return _safe(asdict(x))
@@ -17,7 +19,7 @@ def _safe(x: Any):
 def mutation_receipt(
     result,
     *,
-    build_version: str = "3.3.0",
+    build_version: str = VERSION,
     receipt_index: int = 0,
     previous_receipt_hash: str | None = None,
     authority_state_hash_before: str | None = None,
@@ -32,7 +34,7 @@ def mutation_receipt(
     hash chain H_i = SHA256(H_{i-1} || R_i).
     """
     payload = {
-        "schema": "LGAE_MUTATION_RECEIPT_V3",
+        "schema": "LGAE_MUTATION_RECEIPT_V4",
         "build_version": build_version,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "receipt_index": int(receipt_index),

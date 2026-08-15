@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lgae-v3"
-version = "4.1.0"
+version = "4.1.1"
 description = "Laplacian Geometric Adaptive Evolution v3: multi-timescale geometric controller with fibers and curvature audits"
 readme = "README.md"
 requires-python = ">=3.11"

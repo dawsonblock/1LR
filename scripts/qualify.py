@@ -18,6 +18,7 @@ from lgae_v3.curvature import (
 from lgae_v3.curvature.ollivier import _transport_lp
 from lgae_v3.mutations import RicciFlowReweight
 from lgae_v3.operators import spectral_gap_graphbuffers
+from lgae_v3.version import VERSION, QUALIFICATION_SCHEMA
 
 
 def generator(g):
@@ -46,7 +47,7 @@ def main():
         "C4": nx.cycle_graph(4),
         "K3": nx.complete_graph(3),
     }
-    report = {"schema": "LGAE_V3_QUALIFICATION_V3", "version": "3.2.0", "graphs": {}, "checks": {}, "pass": True}
+    report = {"schema": QUALIFICATION_SCHEMA, "version": VERSION, "graphs": {}, "checks": {}, "pass": True}
     for name, g in graphs.items():
         lly = crosscheck_lly(g)
         Q = generator(g)

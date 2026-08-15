@@ -1,13 +1,13 @@
 <div align="center">
 
-# LGAE-v4.1 / 1LR: Governed Adaptive Geometry Engine
+# LGAE-v4.1.1 / 1LR: Governed Adaptive Geometry Engine
 
 **A Multi-Timescale Geometric Controller for Self-Evolving Graph and Fiber-Bundle Latent Spaces**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.6+](https://img.shields.io/badge/PyTorch-2.6+-ee4c2c.svg)](https://pytorch.org/)
 [![CI Status](https://github.com/dawsonblock/1LR/actions/workflows/ci.yml/badge.svg)](https://github.com/dawsonblock/1LR/actions)
-[![Tests](https://img.shields.io/badge/tests-142%2F142%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-162%2F162%20passing-brightgreen.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Gauge: SO(d)](https://img.shields.io/badge/gauge-SO(d)%20Invariance-purple.svg)]()
 
@@ -18,6 +18,20 @@
 ## Overview
 
 **LGAE-v4.1 (`1LR`)** is a hardened geometric deep learning engine and dynamical controller. It operates over graph-structured data and continuous fiber bundles, combining continuous field diffusion, Lie-algebra gauge connections, discrete Ricci-flow surgery, and multi-operator curvature diagnostics.
+
+### v4.1.1 — Sparse Governance Integrity
+
+This release fixes the integration defects identified in the forensic audit of v4.1.0:
+
+- **Sparse governor operational end-to-end**: `SparseDualOperatorState` now provides `p_diagnostic`/`p_actuation` properties and a `local_dense_diagnostic()` method for local BE/CDE extraction. The governor no longer crashes for N>2048. BE/CDE audits use local 2-hop neighborhood extraction instead of global dense matrices.
+- **Sparse discrepancy coalesces duplicates**: Uses `torch.sparse_coo_tensor.coalesce()` to correctly accumulate duplicate directed edges from mutual k-NN symmetrization. Sparse discrepancy now matches dense reference exactly.
+- **Safe checkpoints persist metric length**: The `length` tensor is now stored in safetensors alongside `weight`, preserving the metric-measure separation through save/restore.
+- **Durable quarantine**: Safe checkpoints now persist complete shadow graph tensors, allowing quarantined transactions to be resumed after reload.
+- **Governance hash includes v4.1 fields**: `shadow_horizons`, `ricci_flow_target`, `ricci_flow_coupled` are now included in the governance fingerprint.
+- **Mutation serialization complete**: `RicciFlowReweight.target_field` and `.coupled` are now serialized in mutation specs, with backward-compatible defaults for pre-v4.1 records.
+- **Multi-horizon max severity**: The final decision is now `max(severity)` across all horizons — any QUARANTINE propagates, not just REJECT.
+- **Metric-measure Forman**: `weighted_forman_edge` now uses the canonical formula with vertex measure m₁, edge measure m₂ (affinity), and metric ω (length), instead of the old square-root weight ratio formula.
+- **Version identity unified**: Single `version.py` module provides `VERSION` used by package, CLI, checkpoints, receipts, manifest, and qualification.
 
 ### v4.1 — Metric–Measure Separation + Multi-Horizon Certification
 
@@ -329,7 +343,7 @@ python scripts/generate_manifest.py --check   # verify manifest
 │   ├── operators.py          # Actuation & diagnostic Markov operators
 │   ├── receipts.py           # Cryptographic receipt logging
 │   └── topology.py           # NetworkX conversion, Betti numbers & PH
-└── tests/                    # 19 test modules with 142 verified unit/regression tests
+└── tests/                    # 20 test modules with 162 verified unit/regression tests
 ```
 
 ---

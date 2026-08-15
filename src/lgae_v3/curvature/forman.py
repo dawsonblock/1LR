@@ -61,52 +61,61 @@ def weighted_af3_proxy_curvatures(g: nx.Graph) -> dict[tuple[int, int], float]:
 
 
 def weighted_forman_edge(g: nx.Graph, u: int, v: int) -> float:
-    """Literature-faithful weighted Forman curvature for an edge.
+    """Metric–measure Forman curvature (v4.1.1 canonical formula).
 
-    Uses the standard weighted Forman expression with explicit edge-weight
-    square-root ratios:
+    Implements the metric–measure Forman expression using separate vertex
+    measure m_1, edge measure m_2 (affinity), and metric ω (length):
 
-        F(e) = w_e * [ w_u (1 - Σ_{e_u~e} √(w_e/w_{e_u}))
-                     + w_v (1 - Σ_{e_v~e} √(w_e/w_{e_v})) ]
+        F_ω(e) = m_2(e)/m_1(u) + m_2(e)/m_1(v)
+                 - Σ_{e_u~e} [m_2(e_u)/m_1(u)] · [ω(e_u)/ω(e)]
+                 - Σ_{e_v~e} [m_2(e_v)/m_1(v)] · [ω(e_v)/ω(e)]
 
-    where w_e is the edge weight, w_u/w_v are vertex weights (default 1),
-    and the sums are over edges adjacent to e at endpoints u and v
-    respectively (excluding e itself).
+    where:
+    - m_1(v) = vertex measure (default: weighted degree = Σ a_{vz})
+    - m_2(e) = edge measure = affinity a_e
+    - ω(e) = metric length ℓ_e
 
-    This is the canonical weighted Forman curvature, distinct from the
-    ``weighted_af3_proxy`` heuristic. The square-root weight ratios
-    capture the relative importance of parallel vs perpendicular edges
-    in a way that simple degree substitution cannot.
+    This is distinct from the ``weighted_af3_proxy`` heuristic. The formula
+    uses explicit metric ratios (ω(e_u)/ω(e)) rather than square-root
+    weight ratios, and operates on the separated metric–measure structure.
     """
     if not g.has_edge(u, v):
         raise ValueError(f"({u},{v}) is not an edge")
-    w_e = float(g[u][v].get("weight", 1.0))
-    if w_e <= 0:
-        raise ValueError("edge weight must be positive for weighted Forman")
+    a_e = float(g[u][v].get("weight", 1.0))  # edge measure m_2(e)
+    if a_e <= 0:
+        raise ValueError("edge affinity must be positive for metric-measure Forman")
+    # Metric length ω(e) — default to 1/affinity if not present
+    omega_e = float(g[u][v].get("length", 1.0 / a_e))
+    if omega_e <= 0:
+        raise ValueError("edge length must be positive for metric-measure Forman")
 
-    # Vertex weights (default 1.0 if not specified)
-    w_u = float(g.nodes[u].get("weight", 1.0))
-    w_v = float(g.nodes[v].get("weight", 1.0))
+    # Vertex measure m_1(v) = weighted degree (sum of affinities)
+    m1_u = float(sum(g[u][z].get("weight", 1.0) for z in g.neighbors(u)))
+    m1_v = float(sum(g[v][z].get("weight", 1.0) for z in g.neighbors(v)))
+    if m1_u <= 0 or m1_v <= 0:
+        raise ValueError("vertex measure must be positive for metric-measure Forman")
 
-    # Edges adjacent to e at u (excluding e itself)
+    # Sum over edges adjacent to e at u (excluding e itself)
     sum_u = 0.0
     for z in g.neighbors(u):
         if z == v:
             continue
-        w_eu = float(g[u][z].get("weight", 1.0))
-        if w_eu > 0:
-            sum_u += math.sqrt(w_e / w_eu)
+        a_eu = float(g[u][z].get("weight", 1.0))  # m_2(e_u)
+        omega_eu = float(g[u][z].get("length", 1.0 / a_eu if a_eu > 0 else 1.0))  # ω(e_u)
+        if a_eu > 0 and omega_eu > 0:
+            sum_u += (a_eu / m1_u) * (omega_eu / omega_e)
 
-    # Edges adjacent to e at v (excluding e itself)
+    # Sum over edges adjacent to e at v (excluding e itself)
     sum_v = 0.0
     for z in g.neighbors(v):
         if z == u:
             continue
-        w_ev = float(g[v][z].get("weight", 1.0))
-        if w_ev > 0:
-            sum_v += math.sqrt(w_e / w_ev)
+        a_ev = float(g[v][z].get("weight", 1.0))  # m_2(e_v)
+        omega_ev = float(g[v][z].get("length", 1.0 / a_ev if a_ev > 0 else 1.0))  # ω(e_v)
+        if a_ev > 0 and omega_ev > 0:
+            sum_v += (a_ev / m1_v) * (omega_ev / omega_e)
 
-    return float(w_e * (w_u * (1.0 - sum_u) + w_v * (1.0 - sum_v)))
+    return float(a_e / m1_u + a_e / m1_v - sum_u - sum_v)
 
 
 def weighted_forman_curvatures(g: nx.Graph) -> dict[tuple[int, int], float]:

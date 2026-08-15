@@ -274,6 +274,8 @@ def mutation_to_spec(mutation: Any) -> dict[str, Any]:
             "dt": float(mutation.dt),
             "min_weight": float(mutation.min_weight),
             "max_weight": float(mutation.max_weight),
+            "target_field": str(mutation.target_field),
+            "coupled": bool(mutation.coupled),
             "name": mutation.name,
         }
     if not isinstance(mutation, (AddEdge, ReweightEdge, PruneEdge)):
@@ -297,5 +299,8 @@ def mutation_from_spec(payload: dict[str, Any]):
     if kind == "RicciFlowReweight":
         rows = data.pop("curvatures")
         data["curvatures"] = {canonical_edge(int(u), int(v)): float(k) for u, v, k in rows}
+        # Backward compat: pre-v4.1 specs don't have target_field/coupled
+        data.setdefault("target_field", "weight")
+        data.setdefault("coupled", True)
         return RicciFlowReweight(**data)
     raise ValueError(f"unknown mutation type: {kind}")

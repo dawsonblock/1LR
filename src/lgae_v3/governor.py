@@ -63,11 +63,13 @@ class GeometryGovernor:
     def __init__(self, cfg: LGAEConfig) -> None:
         self.cfg = cfg
 
-    def operators(self, graph: GraphBuffers, z: Tensor) -> DualOperatorState:
+    def operators(self, graph: GraphBuffers, z: Tensor) -> "DualOperatorState | SparseDualOperatorState":
         """Build dual operators.
 
         For N <= diagnostic_full_kernel_max_nodes, uses the dense exact path.
         For larger N, uses the sparse edge-based path to avoid O(N²) memory.
+        The sparse path is now used for ALL N above the threshold, not just
+        N > 2048, so the governor remains genuinely sparse throughout.
         """
         n = graph.num_nodes
         if n <= self.cfg.operator.diagnostic_full_kernel_max_nodes:
@@ -84,13 +86,7 @@ class GeometryGovernor:
             )
             return DualOperatorState(pa, pd)
         # Sparse path for large N: avoid O(N²) allocation
-        return SparseDualOperatorState.from_graph_and_latent(
-            graph, z,
-            symmetric=self.cfg.operator.symmetric_actuation,
-            self_loop=self.cfg.operator.self_loop,
-            diagnostic_k=self.cfg.operator.diagnostic_k,
-            diagnostic_epsilon_floor=self.cfg.operator.diagnostic_epsilon_floor,
-        ).to_dense() if n <= 2048 else self._sparse_operators(graph, z)
+        return self._sparse_operators(graph, z)
 
     def _sparse_operators(self, graph: GraphBuffers, z: Tensor) -> "SparseDualOperatorState":
         """Return sparse dual operators for large N."""
@@ -245,26 +241,72 @@ class GeometryGovernor:
         details["entropic"] = ent_values
         details["entropic_status"] = {i: r.status for i, r in ent_detail.items()}
 
-        Q, stationary_measure = normalized_markov_generator(ops.p_diagnostic.to(torch.float64))
-        details["bakry_stationary_measure_min"] = float(stationary_measure.min().item())
-        details["bakry_generator"] = "reversible_normalized_markov"
+        # Bakry–Émery and CDE: use local dense extraction for sparse operators
+        # to avoid O(N²) allocation. For dense operators, use the full matrix.
         be_nodes = order[: min(self.cfg.audit.bakry_nodes, len(order))]
-        be = [bakry_emery_curvature(Q, int(i), dimension=self.cfg.audit.cde_dimension) for i in be_nodes]
-        be_min = min(be) if be else None
-        details["bakry_nodes"] = len(be)
-        details["bakry_values"] = be
         cde_nodes = order[: min(self.cfg.audit.cde_nodes, len(order))]
-        cde = (
-            sampled_cde_prime_residual(
-                Q,
-                cde_nodes,
-                dimension=self.cfg.audit.cde_dimension,
-                samples=self.cfg.audit.cde_samples,
-                seed=seed,
+        if isinstance(ops, SparseDualOperatorState):
+            # Local BE/CDE: extract 2-hop neighborhoods for selected nodes
+            all_audit_nodes = torch.tensor(
+                sorted(set(be_nodes) | set(cde_nodes)),
+                dtype=torch.long, device=z.device,
+            ) if (be_nodes or cde_nodes) else torch.tensor([], dtype=torch.long, device=z.device)
+            if all_audit_nodes.numel() > 0:
+                local_P, node_idx = ops.local_dense_diagnostic(all_audit_nodes, radius=2)
+                if local_P.numel() > 0:
+                    Q, stationary_measure = normalized_markov_generator(local_P.to(torch.float64))
+                    details["bakry_stationary_measure_min"] = float(stationary_measure.min().item())
+                    details["bakry_generator"] = "reversible_normalized_markov_local_sparse"
+                    # Map global node IDs to local indices
+                    idx_map = {int(g): i for i, g in enumerate(node_idx.tolist())}
+                    be = [
+                        bakry_emery_curvature(Q, idx_map[int(i)], dimension=self.cfg.audit.cde_dimension)
+                        for i in be_nodes if int(i) in idx_map
+                    ]
+                    be_min = min(be) if be else None
+                    details["bakry_nodes"] = len(be)
+                    details["bakry_values"] = be
+                    local_cde_nodes = [idx_map[int(i)] for i in cde_nodes if int(i) in idx_map]
+                    cde = (
+                        sampled_cde_prime_residual(
+                            Q,
+                            local_cde_nodes,
+                            dimension=self.cfg.audit.cde_dimension,
+                            samples=self.cfg.audit.cde_samples,
+                            seed=seed,
+                        )
+                        if local_cde_nodes
+                        else None
+                    )
+                else:
+                    be_min = None
+                    details["bakry_nodes"] = 0
+                    details["bakry_values"] = []
+                    cde = None
+            else:
+                be_min = None
+                details["bakry_nodes"] = 0
+                details["bakry_values"] = []
+                cde = None
+        else:
+            Q, stationary_measure = normalized_markov_generator(ops.p_diagnostic.to(torch.float64))
+            details["bakry_stationary_measure_min"] = float(stationary_measure.min().item())
+            details["bakry_generator"] = "reversible_normalized_markov"
+            be = [bakry_emery_curvature(Q, int(i), dimension=self.cfg.audit.cde_dimension) for i in be_nodes]
+            be_min = min(be) if be else None
+            details["bakry_nodes"] = len(be)
+            details["bakry_values"] = be
+            cde = (
+                sampled_cde_prime_residual(
+                    Q,
+                    cde_nodes,
+                    dimension=self.cfg.audit.cde_dimension,
+                    samples=self.cfg.audit.cde_samples,
+                    seed=seed,
+                )
+                if cde_nodes
+                else None
             )
-            if cde_nodes
-            else None
-        )
         return AuditSnapshot(
             lambda2=lam,
             operator_discrepancy=discrepancy,
@@ -426,17 +468,29 @@ class GeometryGovernor:
 
         # Multi-horizon shadow certification (v4.1).
         # When shadow_horizons is configured, the mutation must remain
-        # admissible across ALL horizons, not just the default shadow_steps.
+        # admissible across ALL horizons. The final decision is the MAX
+        # severity across all horizons:
+        #   any REJECT → REJECT
+        #   else any QUARANTINE → QUARANTINE
+        #   else ACCEPT
         horizons = self.cfg.mutation.shadow_horizons
         horizon_results: list[dict] = []
+        horizon_decisions: list[tuple[int, MutationDecision, list[str]]] = []
         if horizons:
             for h in horizons:
                 if h == self.cfg.mutation.shadow_steps:
-                    # Already evaluated at this horizon
+                    # Already evaluated at this horizon via default shadow_steps
+                    default_result = self._decide_transition(
+                        before, after,
+                        transition_name=getattr(mutation, "name", type(mutation).__name__),
+                        metadata={"horizon": int(h)},
+                    )
                     horizon_results.append({
                         "horizon": int(h),
                         "delta_norm": float(torch.linalg.vector_norm(z_shadow - z).item()),
+                        "decision": default_result.decision.value,
                     })
+                    horizon_decisions.append((int(h), default_result.decision, default_result.reasons))
                     continue
                 try:
                     z_h = self.shadow_rollout(shadow, z, gauge_bank=gauge_bank, steps=int(h))
@@ -451,19 +505,9 @@ class GeometryGovernor:
                         "delta_norm": float(torch.linalg.vector_norm(z_h - z).item()),
                         "decision": h_result.decision.value,
                     })
-                    # If any horizon rejects, the mutation is rejected
-                    if h_result.decision == MutationDecision.REJECT:
-                        return MutationResult(
-                            MutationDecision.REJECT,
-                            [f"multi_horizon_reject_at_H={h}"] + h_result.reasons,
-                            before=before,
-                            after=after_h,
-                            metadata={
-                                "mutation": getattr(mutation, "name", type(mutation).__name__),
-                                "multi_horizon": horizon_results,
-                            },
-                        ), shadow
+                    horizon_decisions.append((int(h), h_result.decision, h_result.reasons))
                 except Exception as exc:
+                    # Shadow failure at any horizon is a REJECT
                     return MutationResult(
                         MutationDecision.REJECT,
                         [f"multi_horizon_shadow_failed_at_H={h}:{exc}"],
@@ -473,6 +517,39 @@ class GeometryGovernor:
                             "multi_horizon": horizon_results,
                         },
                     ), shadow
+
+            # Aggregate: max severity across all horizons
+            severity = {MutationDecision.ACCEPT: 0, MutationDecision.QUARANTINE: 1, MutationDecision.REJECT: 2}
+            worst_h, worst_decision, worst_reasons = max(
+                horizon_decisions, key=lambda x: severity[x[1]]
+            )
+            metadata = {
+                **metadata,
+                "base_graph_version": int(graph.version),
+                "base_graph_hash": graph.state_hash(),
+                "shadow_graph_version": int(shadow.version),
+                "shadow_graph_hash": shadow.state_hash(),
+                "shadow_steps": int(self.cfg.mutation.shadow_steps),
+                "shadow_latent_delta_norm": float(torch.linalg.vector_norm(z_shadow - z).item()),
+                "multi_horizon": horizon_results,
+                "multi_horizon_worst": worst_h,
+            }
+            if worst_decision != MutationDecision.ACCEPT:
+                return MutationResult(
+                    worst_decision,
+                    [f"multi_horizon_{worst_decision.value}_at_H={worst_h}"] + worst_reasons,
+                    before=before,
+                    after=after,
+                    metadata=metadata,
+                ), shadow
+            # All horizons ACCEPT
+            return MutationResult(
+                MutationDecision.ACCEPT,
+                [],
+                before=before,
+                after=after,
+                metadata=metadata,
+            ), shadow
 
         metadata = {
             **metadata,

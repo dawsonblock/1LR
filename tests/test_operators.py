@@ -38,7 +38,7 @@ def test_field_and_sparse_field_kernels():
 def test_mutation_receipt(tmp_path):
     receipt = mutation_receipt({"status": "accepted", "step": 1})
     assert "sha256" in receipt
-    assert receipt["schema"] == "LGAE_MUTATION_RECEIPT_V3"
+    assert receipt["schema"] == "LGAE_MUTATION_RECEIPT_V4"
     file_path = tmp_path / "receipts.jsonl"
     append_receipt(file_path, receipt)
     assert file_path.exists()

@@ -266,7 +266,10 @@ _GOVERNANCE_FIELDS = {
     "mutation": ("mutation_interval", "audit_interval", "shadow_steps", "shadow_eta",
                  "max_edge_weight", "min_edge_weight", "edge_add_weight",
                  "quarantine_on_uncertainty", "require_state_hash_match",
-                 "ricci_flow_dt", "ricci_target_curvature", "edge_cooldown_steps",
+                 "shadow_horizons",
+                 "ricci_flow_dt", "ricci_target_curvature",
+                 "ricci_flow_target", "ricci_flow_coupled",
+                 "edge_cooldown_steps",
                  "add_curvature_threshold", "deadband", "prune_curvature_threshold"),
     "compile": ("enabled", "dynamic", "mode", "fullgraph", "backend", "isolate_recompiles"),
 }

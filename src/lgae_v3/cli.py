@@ -8,6 +8,7 @@ from .config import load_config
 from .evolution import LGAEEngine
 from .types import make_graph_buffers
 from .curvature import crosscheck_lly
+from .version import VERSION
 
 
 def _demo_graph(n: int, capacity_factor: float = 2.0):
@@ -48,7 +49,7 @@ def main(argv=None):
     fiber=eng.fiber_tick()
     mutation=eng.propose_midpoint_edge()
     result=eng.evaluate_and_maybe_commit(mutation) if mutation else None
-    out={"version":"3.2.0","nodes":buffers.num_nodes,"edges_before":len(g.edges()),"capacity_mean":float(fiber["capacity"].float().mean()),"audit":_snapshot_dict(eng.audit())}
+    out={"version":VERSION,"nodes":buffers.num_nodes,"edges_before":len(g.edges()),"capacity_mean":float(fiber["capacity"].float().mean()),"audit":_snapshot_dict(eng.audit())}
     if result:
         out["mutation"]={"decision":result.decision.value,"reasons":result.reasons,"metadata":result.metadata}
     print(json.dumps(out,indent=2,default=str)); return 0
