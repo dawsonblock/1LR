@@ -5,12 +5,12 @@
     ".gitignore",
     "MANIFEST.sha256.json"
   ],
-  "file_count": 75,
+  "file_count": 69,
   "files": [
     {
-      "path": "=0.4",
-      "bytes": 238,
-      "sha256": "3c5d69abacfcd89eeea92f1759ec2c87044594e26f5b83bad582977217110fd8"
+      "path": ".github/workflows/ci.yml",
+      "bytes": 1287,
+      "sha256": "86ab9ecb67b57ab02b33f738846180f97e4e5c37219195d4323d422ca5a15bfa"
     },
     {
       "path": "BUILD_REPORT.md",
@@ -104,43 +104,13 @@
     },
     {
       "path": "scripts/generate_manifest.py",
-      "bytes": 5130,
-      "sha256": "ac49a5ec1b1b51afde6d8f9e2602e13df3368150dbd36dfc00eff11a704bbd1f"
+      "bytes": 5314,
+      "sha256": "cc5d29f55cfa20cfbd0f3eda5eae747226026e0124d3c68f388b8360a39a9a5a"
     },
     {
       "path": "scripts/qualify.py",
       "bytes": 5135,
       "sha256": "99ac622361ad7a6c7b85e98c2e51d619599ccf943548d07d052211742f146f3a"
-    },
-    {
-      "path": "src/lgae_v3.egg-info/PKG-INFO",
-      "bytes": 15882,
-      "sha256": "ee25d83a083b788cc2c8b499fac7dc0e2cb632106e03f4df4c0e4ca3337464e9"
-    },
-    {
-      "path": "src/lgae_v3.egg-info/SOURCES.txt",
-      "bytes": 1538,
-      "sha256": "0e1b2783aad934267a8e238a1badb5ea869b4b96a0186f9e148cca2758e5e6f0"
-    },
-    {
-      "path": "src/lgae_v3.egg-info/dependency_links.txt",
-      "bytes": 1,
-      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
-    },
-    {
-      "path": "src/lgae_v3.egg-info/entry_points.txt",
-      "bytes": 45,
-      "sha256": "537344a5ebfb0850caf138d119992d696930444371b610387ac360fa80227228"
-    },
-    {
-      "path": "src/lgae_v3.egg-info/requires.txt",
-      "bytes": 129,
-      "sha256": "32e7216a94308f337a55c5376ba944f519fbba5f89cdaf4cd32c2878b6067ce1"
-    },
-    {
-      "path": "src/lgae_v3.egg-info/top_level.txt",
-      "bytes": 8,
-      "sha256": "93472d5ace9591854334383c423fd2356a783dea1a73ecae21e0ced81a168a40"
     },
     {
       "path": "src/lgae_v3/__init__.py",

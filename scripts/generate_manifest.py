@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import hashlib
 import json
 import sys
@@ -32,12 +33,18 @@ DIR_EXCLUDES = {
     ".git",
     "dist",
     "build",
-    "*.egg-info",
     "htmlcov",
-    ".coverage",
     ".venv",
     "venv",
     "ENV",
+}
+
+# File patterns that are not part of the source contract.
+FILE_EXCLUDES = {
+    "*.egg-info",  # setuptools build metadata
+    "*.pyc",
+    "*.pyo",
+    "*.so",
 }
 
 
@@ -47,14 +54,15 @@ def should_exclude(path: Path, repo_root: Path) -> bool:
     parts = rel.parts
     for part in parts:
         for pattern in DIR_EXCLUDES:
-            if pattern in part:
+            if part == pattern:
+                return True
+        for pattern in FILE_EXCLUDES:
+            if fnmatch.fnmatch(part, pattern):
                 return True
     if rel.name in MANIFEST_EXCLUDES:
         return True
     # Exclude common transient files
     if rel.name.startswith(".coverage"):
-        return True
-    if rel.suffix == ".pyc" or rel.suffix == ".pyo":
         return True
     return False
 
