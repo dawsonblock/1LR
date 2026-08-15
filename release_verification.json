@@ -1,0 +1,45 @@
+{
+  "cli_lly": {
+    "status": "pass"
+  },
+  "compile_smoke": {
+    "output": "{'mode': 'static', 'ms_per_step': 0.31212400062941015}",
+    "status": "pass"
+  },
+  "demo": {
+    "mutation_decision": "quarantine",
+    "reasons": [
+      "integral_lly_sampled_not_global"
+    ],
+    "status": "pass"
+  },
+  "editable_install": {
+    "status": "pass",
+    "version": "3.2.0"
+  },
+  "gauge_compile_smoke": {
+    "gauge_grad_norm": 1.649509325772153e-07,
+    "loss": 0.0628751813359615,
+    "status": "pass"
+  },
+  "pytest": {
+    "passed": 69,
+    "status": "pass"
+  },
+  "qualification": {
+    "checks": {
+      "bakry_k2_oracle": true,
+      "bakry_p4_schur_oracle": true,
+      "entropic_empty_two_hop_is_inf": true,
+      "lobpcg_matches_exact": true,
+      "local_bridge_gate": true,
+      "reversible_volume_measure": true,
+      "ricci_flow_weight_positivity": true,
+      "sinkhorn_log_small_eps_large_diameter": true,
+      "so_connection_invariants": true
+    },
+    "status": "pass"
+  },
+  "schema": "LGAE_V3_RELEASE_VERIFICATION_V1",
+  "version": "3.2.0"
+}

@@ -1,0 +1,251 @@
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass, field
+from typing import Any, Protocol
+import math
+
+import torch
+
+from .types import EdgeRole, GraphBuffers, edge_role_code
+
+
+class GraphMutation(Protocol):
+    name: str
+    def apply(self, graph: GraphBuffers) -> dict: ...
+
+
+def canonical_edge(u: int, v: int) -> tuple[int, int]:
+    return (min(int(u), int(v)), max(int(u), int(v)))
+
+
+def _validate_endpoint(graph: GraphBuffers, u: int, v: int) -> None:
+    if not (0 <= int(u) < graph.num_nodes and 0 <= int(v) < graph.num_nodes):
+        raise ValueError("edge endpoint out of range")
+    if int(u) == int(v):
+        raise ValueError("self edge not allowed")
+
+
+def _find_edge(graph: GraphBuffers, u: int, v: int) -> torch.Tensor:
+    return torch.where(graph.valid & (((graph.src == u) & (graph.dst == v)) | ((graph.src == v) & (graph.dst == u))))[0]
+
+
+@dataclass(slots=True)
+class AddEdge:
+    u: int
+    v: int
+    weight: float = 1.0
+    role: EdgeRole | str | int = EdgeRole.GENERIC
+    name: str = "add_edge"
+
+    def apply(self, graph: GraphBuffers) -> dict:
+        _validate_endpoint(graph, self.u, self.v)
+        w = float(self.weight)
+        if not math.isfinite(w) or w <= 0:
+            raise ValueError("edge weight must be finite and positive")
+        role_code = edge_role_code(self.role)
+        existing = _find_edge(graph, self.u, self.v)
+        if existing.numel():
+            i = int(existing[0].item())
+            new_w = float(graph.weight[i].item()) + w
+            if not math.isfinite(new_w) or new_w <= 0:
+                raise ValueError("reweighted edge became invalid")
+            graph.weight[i] = new_w
+            if graph.role is not None:
+                graph.role[i] = role_code
+            graph.bump_version()
+            graph.validate()
+            return {"slot": i, "reweighted_existing": True, "new_weight": new_w, "role": role_code, "affected_edges": [canonical_edge(self.u, self.v)]}
+        free = torch.where(~graph.valid)[0]
+        if not free.numel():
+            raise RuntimeError("graph edge buffer capacity exhausted")
+        i = int(free[0].item())
+        graph.src[i] = int(self.u)
+        graph.dst[i] = int(self.v)
+        graph.weight[i] = w
+        graph.valid[i] = True
+        if graph.role is not None:
+            graph.role[i] = role_code
+        graph.bump_version()
+        graph.validate()
+        return {"slot": i, "reweighted_existing": False, "role": role_code, "affected_edges": [canonical_edge(self.u, self.v)]}
+
+
+@dataclass(slots=True)
+class ReweightEdge:
+    u: int
+    v: int
+    factor: float = 1.1
+    min_weight: float = 1e-3
+    max_weight: float = 10.0
+    name: str = "reweight_edge"
+
+    def apply(self, graph: GraphBuffers) -> dict:
+        _validate_endpoint(graph, self.u, self.v)
+        factor = float(self.factor)
+        if not math.isfinite(factor) or factor <= 0:
+            raise ValueError("reweight factor must be finite and positive")
+        if not (math.isfinite(self.min_weight) and math.isfinite(self.max_weight) and 0 < self.min_weight <= self.max_weight):
+            raise ValueError("invalid weight clamp")
+        ids = _find_edge(graph, self.u, self.v)
+        if not ids.numel():
+            raise ValueError("edge not found")
+        i = int(ids[0].item())
+        graph.weight[i] = torch.clamp(graph.weight[i] * factor, self.min_weight, self.max_weight)
+        graph.bump_version()
+        graph.validate()
+        return {"slot": i, "new_weight": float(graph.weight[i].item()), "affected_edges": [canonical_edge(self.u, self.v)]}
+
+
+@dataclass(slots=True)
+class PruneEdge:
+    u: int
+    v: int
+    name: str = "prune_edge"
+
+    def apply(self, graph: GraphBuffers) -> dict:
+        _validate_endpoint(graph, self.u, self.v)
+        ids = _find_edge(graph, self.u, self.v)
+        if not ids.numel():
+            raise ValueError("edge not found")
+        i = int(ids[0].item())
+        graph.valid[i] = False
+        graph.weight[i] = 0.0
+        graph.bump_version()
+        graph.validate()
+        return {"slot": i, "affected_edges": [canonical_edge(self.u, self.v)]}
+
+
+@dataclass(slots=True)
+class RicciFlowReweight:
+    """Log-conformal Ricci-flow update over existing edge slots.
+
+    The update is w' = clamp(w * exp(-dt * (kappa-target)), [min,max]), so positive
+    weights remain positive by construction. ``curvatures`` uses canonical undirected
+    edge tuples and may cover only a subset of active edges.
+    """
+    curvatures: dict[tuple[int, int], float]
+    target_curvature: float = 0.0
+    dt: float = 0.05
+    min_weight: float = 1e-3
+    max_weight: float = 10.0
+    name: str = "ricci_flow_reweight"
+
+    def apply(self, graph: GraphBuffers) -> dict:
+        if not (math.isfinite(self.dt) and self.dt > 0):
+            raise ValueError("dt must be finite and positive")
+        if not (math.isfinite(self.target_curvature) and 0 < self.min_weight <= self.max_weight):
+            raise ValueError("invalid Ricci-flow parameters")
+        changed: list[tuple[int, int]] = []
+        slots: list[int] = []
+        for edge, kval in self.curvatures.items():
+            u, v = canonical_edge(*edge)
+            _validate_endpoint(graph, u, v)
+            kappa = float(kval)
+            if not math.isfinite(kappa):
+                raise ValueError("curvature field must be finite")
+            ids = _find_edge(graph, u, v)
+            if not ids.numel():
+                continue
+            i = int(ids[0].item())
+            exponent = max(-50.0, min(50.0, -float(self.dt) * (kappa - float(self.target_curvature))))
+            factor = math.exp(exponent)
+            new_w = float(graph.weight[i].item()) * factor
+            new_w = max(float(self.min_weight), min(float(self.max_weight), new_w))
+            graph.weight[i] = new_w
+            changed.append((u, v))
+            slots.append(i)
+        if changed:
+            graph.bump_version()
+            graph.validate()
+        return {"slots": slots, "affected_edges": changed, "updated_edges": len(changed)}
+
+
+def affected_edges(mutation: Any) -> list[tuple[int, int]]:
+    if isinstance(mutation, (AddEdge, ReweightEdge, PruneEdge)):
+        return [canonical_edge(mutation.u, mutation.v)]
+    if isinstance(mutation, RicciFlowReweight):
+        return [canonical_edge(*e) for e in mutation.curvatures]
+    return []
+
+
+@dataclass(slots=True)
+class MutationCooldownTracker:
+    cooldown_steps: int = 20
+    last_modified: dict[tuple[int, int], int] = field(default_factory=dict)
+
+    def remaining(self, u: int, v: int, step: int) -> int:
+        last = self.last_modified.get(canonical_edge(u, v))
+        if last is None:
+            return 0
+        return max(0, int(self.cooldown_steps) - (int(step) - int(last)))
+
+    def allows(self, mutation: Any, step: int) -> tuple[bool, dict[tuple[int, int], int]]:
+        blocked: dict[tuple[int, int], int] = {}
+        for e in affected_edges(mutation):
+            rem = self.remaining(*e, step)
+            if rem > 0:
+                blocked[e] = rem
+        return (not blocked), blocked
+
+    def record(self, mutation: Any, step: int) -> None:
+        for e in affected_edges(mutation):
+            self.last_modified[e] = int(step)
+
+    def surgery_action(self, curvature: float, *, add_threshold: float, deadband: float, prune_threshold: float) -> str | None:
+        k = float(curvature)
+        if k < float(add_threshold):
+            return "add"
+        if k > float(prune_threshold):
+            return "prune"
+        if -float(deadband) <= k <= float(deadband):
+            return None
+        return None
+
+    def to_state_dict(self) -> dict[str, Any]:
+        return {
+            "cooldown_steps": int(self.cooldown_steps),
+            "last_modified": [[u, v, int(step)] for (u, v), step in sorted(self.last_modified.items())],
+        }
+
+    @classmethod
+    def from_state_dict(cls, payload: dict[str, Any]) -> "MutationCooldownTracker":
+        obj = cls(cooldown_steps=int(payload.get("cooldown_steps", 20)))
+        for u, v, step in payload.get("last_modified", []):
+            obj.last_modified[canonical_edge(u, v)] = int(step)
+        return obj
+
+
+def mutation_to_spec(mutation: Any) -> dict[str, Any]:
+    if isinstance(mutation, RicciFlowReweight):
+        return {
+            "type": "RicciFlowReweight",
+            "curvatures": [[u, v, float(k)] for (u, v), k in sorted((canonical_edge(*e), v) for e, v in mutation.curvatures.items())],
+            "target_curvature": float(mutation.target_curvature),
+            "dt": float(mutation.dt),
+            "min_weight": float(mutation.min_weight),
+            "max_weight": float(mutation.max_weight),
+            "name": mutation.name,
+        }
+    if not isinstance(mutation, (AddEdge, ReweightEdge, PruneEdge)):
+        raise TypeError(f"unsupported mutation type: {type(mutation).__name__}")
+    payload = asdict(mutation)
+    payload["type"] = type(mutation).__name__
+    if isinstance(payload.get("role"), EdgeRole):
+        payload["role"] = payload["role"].value
+    return payload
+
+
+def mutation_from_spec(payload: dict[str, Any]):
+    data = dict(payload)
+    kind = data.pop("type")
+    if kind == "AddEdge":
+        return AddEdge(**data)
+    if kind == "ReweightEdge":
+        return ReweightEdge(**data)
+    if kind == "PruneEdge":
+        return PruneEdge(**data)
+    if kind == "RicciFlowReweight":
+        rows = data.pop("curvatures")
+        data["curvatures"] = {canonical_edge(int(u), int(v)): float(k) for u, v, k in rows}
+        return RicciFlowReweight(**data)
+    raise ValueError(f"unknown mutation type: {kind}")

@@ -1,0 +1,219 @@
+{
+  "schema": "LGAE_V3_QUALIFICATION_V3",
+  "version": "3.2.0",
+  "graphs": {
+    "K2": {
+      "lly": {
+        "ok": true,
+        "max_abs_error": 0.0,
+        "rows": [
+          {
+            "edge": [
+              0,
+              1
+            ],
+            "laplacian": 2.0,
+            "half_idleness": 2.0,
+            "abs_error": 0.0
+          }
+        ]
+      },
+      "af3": {
+        "(0, 1)": 2.0
+      },
+      "weak_entropic": {
+        "0": "Infinity",
+        "1": "Infinity"
+      },
+      "bakry": [
+        1.9999999999999996,
+        1.9999999999999996
+      ]
+    },
+    "P4": {
+      "lly": {
+        "ok": true,
+        "max_abs_error": 0.0,
+        "rows": [
+          {
+            "edge": [
+              0,
+              1
+            ],
+            "laplacian": 1.0,
+            "half_idleness": 1.0,
+            "abs_error": 0.0
+          },
+          {
+            "edge": [
+              1,
+              2
+            ],
+            "laplacian": 0.0,
+            "half_idleness": 0.0,
+            "abs_error": 0.0
+          },
+          {
+            "edge": [
+              2,
+              3
+            ],
+            "laplacian": 1.0,
+            "half_idleness": 1.0,
+            "abs_error": 0.0
+          }
+        ]
+      },
+      "af3": {
+        "(0, 1)": 1.0,
+        "(1, 2)": 0.0,
+        "(2, 3)": 1.0
+      },
+      "weak_entropic": {
+        "0": -0.0,
+        "1": 4.000000331361484e-10,
+        "2": 4.000000331361484e-10,
+        "3": -0.0
+      },
+      "bakry": [
+        0.9999999999999998,
+        0.29289321881345254,
+        0.29289321881345254,
+        0.9999999999999998
+      ]
+    },
+    "C4": {
+      "lly": {
+        "ok": true,
+        "max_abs_error": 0.0,
+        "rows": [
+          {
+            "edge": [
+              0,
+              1
+            ],
+            "laplacian": 1.0,
+            "half_idleness": 1.0,
+            "abs_error": 0.0
+          },
+          {
+            "edge": [
+              0,
+              3
+            ],
+            "laplacian": 1.0,
+            "half_idleness": 1.0,
+            "abs_error": 0.0
+          },
+          {
+            "edge": [
+              1,
+              2
+            ],
+            "laplacian": 1.0,
+            "half_idleness": 1.0,
+            "abs_error": 0.0
+          },
+          {
+            "edge": [
+              2,
+              3
+            ],
+            "laplacian": 1.0,
+            "half_idleness": 1.0,
+            "abs_error": 0.0
+          }
+        ]
+      },
+      "af3": {
+        "(0, 1)": 0.0,
+        "(0, 3)": 0.0,
+        "(1, 2)": 0.0,
+        "(2, 3)": 0.0
+      },
+      "weak_entropic": {
+        "0": 1.3862943611198906,
+        "1": 1.3862943611198906,
+        "2": 1.3862943611198906,
+        "3": 1.3862943611198906
+      },
+      "bakry": [
+        1.0,
+        1.0,
+        1.0,
+        1.0
+      ]
+    },
+    "K3": {
+      "lly": {
+        "ok": true,
+        "max_abs_error": 0.0,
+        "rows": [
+          {
+            "edge": [
+              0,
+              1
+            ],
+            "laplacian": 1.5,
+            "half_idleness": 1.5,
+            "abs_error": 0.0
+          },
+          {
+            "edge": [
+              0,
+              2
+            ],
+            "laplacian": 1.5,
+            "half_idleness": 1.5,
+            "abs_error": 0.0
+          },
+          {
+            "edge": [
+              1,
+              2
+            ],
+            "laplacian": 1.5,
+            "half_idleness": 1.5,
+            "abs_error": 0.0
+          }
+        ]
+      },
+      "af3": {
+        "(0, 1)": 3.0,
+        "(0, 2)": 3.0,
+        "(1, 2)": 3.0
+      },
+      "weak_entropic": {
+        "0": "Infinity",
+        "1": "Infinity",
+        "2": "Infinity"
+      },
+      "bakry": [
+        1.25,
+        1.25,
+        1.25
+      ]
+    }
+  },
+  "checks": {
+    "bakry_p4_schur_oracle": true,
+    "bakry_k2_oracle": true,
+    "entropic_empty_two_hop_is_inf": true,
+    "sinkhorn_log_small_eps_large_diameter": true,
+    "reversible_volume_measure": true,
+    "so_connection_invariants": true,
+    "lobpcg_matches_exact": true,
+    "ricci_flow_weight_positivity": true,
+    "local_bridge_gate": true
+  },
+  "pass": true,
+  "sinkhorn_stress": {
+    "exact": 998.0,
+    "approx": 997.9999999992567
+  },
+  "spectral": {
+    "exact": 0.03407417371093177,
+    "lobpcg": 0.03407417371093184,
+    "method": "lobpcg"
+  }
+}
