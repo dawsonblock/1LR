@@ -114,6 +114,16 @@ class LGAEEngine(nn.Module):
         self.cooldowns = MutationCooldownTracker(self.cfg.mutation.edge_cooldown_steps)
         self.step_index = 0
         self.quarantine: list[QuarantineItem] = []
+        self.optimizers: list[Any] = []
+
+    def register_optimizer(self, optimizer: Any) -> None:
+        """Register an optimizer so slot resets also clear optimizer moment slices."""
+        if optimizer is not None and optimizer not in self.optimizers:
+            self.optimizers.append(optimizer)
+
+    def unregister_optimizer(self, optimizer: Any) -> None:
+        if optimizer in self.optimizers:
+            self.optimizers.remove(optimizer)
 
     def forward(self) -> Tensor:
         return self.fibers()
@@ -253,7 +263,7 @@ class LGAEEngine(nn.Module):
             self.cooldowns.record(mutation, self.step_index)
             if self.gauge_connections is not None:
                 reset = torch.where(old_valid != self.graph.valid)[0]
-                self.gauge_connections.reset_slots(reset)
+                self.gauge_connections.reset_slots(reset, optimizers=self.optimizers)
         elif result.decision == MutationDecision.QUARANTINE:
             self.quarantine.append(QuarantineItem(
                 kind="graph", result=result, base_graph_version=base_version, base_graph_hash=base_hash,
@@ -303,7 +313,7 @@ class LGAEEngine(nn.Module):
                 mutation = mutation_from_spec(item.mutation_spec)
                 self.cooldowns.record(mutation, self.step_index)
             if self.gauge_connections is not None:
-                self.gauge_connections.reset_slots(torch.where(old_valid != self.graph.valid)[0])
+                self.gauge_connections.reset_slots(torch.where(old_valid != self.graph.valid)[0], optimizers=self.optimizers)
         elif item.kind == "fiber":
             if item.shadow_fibers is None:
                 raise RuntimeError("corrupt fiber quarantine item")

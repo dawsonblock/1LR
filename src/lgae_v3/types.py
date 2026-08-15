@@ -56,6 +56,8 @@ class GraphBuffers:
     weights are finite and strictly positive, and undirected duplicate edges are forbidden.
     ``version`` is monotonically incremented by committed mutation operations and participates
     in optimistic-concurrency checks for quarantined shadows.
+    ``slot_generation`` increments monotonically whenever an individual edge slot changes
+    identity or validity lifecycle.
     """
 
     num_nodes: int
@@ -64,9 +66,12 @@ class GraphBuffers:
     weight: Tensor
     valid: Tensor
     role: Tensor | None = None
+    slot_generation: Tensor | None = None
     version: int = 0
 
     def __post_init__(self) -> None:
+        if self.slot_generation is None:
+            self.slot_generation = torch.zeros(self.src.numel(), dtype=torch.long, device=self.src.device)
         self.validate()
 
     @property
@@ -89,6 +94,13 @@ class GraphBuffers:
             raise TypeError("src and dst must be torch.long")
         if self.valid.dtype != torch.bool:
             raise TypeError("valid must be boolean")
+        if self.slot_generation is not None:
+            if self.slot_generation.ndim != 1 or self.slot_generation.numel() != n:
+                raise ValueError("slot_generation must be 1-D with graph buffer capacity")
+            if self.slot_generation.dtype != torch.long:
+                raise TypeError("slot_generation must be torch.long")
+            if bool((self.slot_generation < 0).any().item()):
+                raise ValueError("slot_generation must be nonnegative")
         if self.role is not None:
             if self.role.ndim != 1 or self.role.numel() != n:
                 raise ValueError("role must be 1-D with graph buffer capacity")
@@ -126,6 +138,7 @@ class GraphBuffers:
             weight=self.weight.clone(),
             valid=self.valid.clone(),
             role=None if self.role is None else self.role.clone(),
+            slot_generation=None if self.slot_generation is None else self.slot_generation.clone(),
             version=int(self.version),
         )
 
@@ -169,12 +182,15 @@ class GraphBuffers:
             "weight": self.weight.detach().cpu(),
             "valid": self.valid.detach().cpu(),
             "role": None if self.role is None else self.role.detach().cpu(),
+            "slot_generation": None if self.slot_generation is None else self.slot_generation.detach().cpu(),
             "version": int(self.version),
             "state_hash": self.state_hash(),
         }
 
     @classmethod
     def from_state_dict(cls, payload: dict[str, Any], *, device=None) -> "GraphBuffers":
+        cap = len(payload["src"])
+        slot_gen = payload.get("slot_generation")
         graph = cls(
             num_nodes=int(payload["num_nodes"]),
             src=torch.as_tensor(payload["src"], dtype=torch.long, device=device).clone(),
@@ -182,6 +198,7 @@ class GraphBuffers:
             weight=torch.as_tensor(payload["weight"], device=device).clone(),
             valid=torch.as_tensor(payload["valid"], dtype=torch.bool, device=device).clone(),
             role=None if payload.get("role") is None else torch.as_tensor(payload["role"], dtype=torch.long, device=device).clone(),
+            slot_generation=torch.zeros(cap, dtype=torch.long, device=device) if slot_gen is None else torch.as_tensor(slot_gen, dtype=torch.long, device=device).clone(),
             version=int(payload.get("version", 0)),
         )
         expected = payload.get("state_hash")
@@ -229,6 +246,9 @@ def make_graph_buffers(
     weight = torch.zeros(cap, dtype=dtype, device=device)
     valid = torch.zeros(cap, dtype=torch.bool, device=device)
     role_tensor = torch.full((cap,), edge_role_code(EdgeRole.GENERIC), dtype=torch.long, device=device)
+    slot_gen = torch.zeros(cap, dtype=torch.long, device=device)
+    if len(edges) > 0:
+        slot_gen[:len(edges)] = 1
     role_list = list(roles) if roles is not None else None
     if role_list is not None and len(role_list) != len(edges):
         raise ValueError("roles length must match edges length")
@@ -257,7 +277,7 @@ def make_graph_buffers(
         valid[i] = True
         if role_list is not None:
             role_tensor[i] = edge_role_code(role_list[i])
-    return GraphBuffers(num_nodes, src, dst, weight, valid, role_tensor, version=0)
+    return GraphBuffers(num_nodes, src, dst, weight, valid, role_tensor, slot_generation=slot_gen, version=0)
 
 
 def round_edge_capacity(edge_count: int, bucket_size: int = 256, reserve_buckets: int = 1) -> int:

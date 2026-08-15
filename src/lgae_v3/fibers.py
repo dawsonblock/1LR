@@ -290,6 +290,7 @@ class SOConnectionBank(nn.Module):
         self.dim = int(dim)
         self.parameterization = parameterization
         self.raw_generators = nn.Parameter(torch.zeros(edge_capacity, dim, dim, device=device, dtype=dtype))
+        self.register_buffer("slot_generation", torch.zeros(edge_capacity, dtype=torch.long, device=device))
 
     def generators(self) -> Tensor:
         return skew_symmetric(self.raw_generators)
@@ -305,9 +306,42 @@ class SOConnectionBank(nn.Module):
         return mats if slot_ids is None else mats[slot_ids]
 
     @torch.no_grad()
-    def reset_slots(self, slot_ids: Tensor) -> None:
-        if slot_ids.numel():
-            self.raw_generators.index_fill_(0, slot_ids.to(self.raw_generators.device), 0.0)
+    def reset_slots(
+        self,
+        slot_ids: Tensor | list[int] | tuple[int, ...],
+        optimizers: Any = None,
+    ) -> None:
+        """Reset Lie-algebra generators and optimizer state for retired/reassigned slots."""
+        if not isinstance(slot_ids, Tensor):
+            slot_ids = torch.as_tensor(slot_ids, dtype=torch.long, device=self.raw_generators.device)
+        else:
+            slot_ids = slot_ids.to(self.raw_generators.device)
+        if slot_ids.numel() == 0:
+            return
+
+        # 1. Zero out raw parameter generators
+        self.raw_generators.index_fill_(0, slot_ids, 0.0)
+
+        # 2. Zero parameter gradients if present
+        if self.raw_generators.grad is not None:
+            self.raw_generators.grad.index_fill_(0, slot_ids, 0.0)
+
+        # 3. Increment slot generation
+        self.slot_generation.index_add_(0, slot_ids, torch.ones_like(slot_ids))
+
+        # 4. Clear optimizer state slices for the modified slots
+        if optimizers is not None:
+            opts = [optimizers] if not isinstance(optimizers, (list, tuple, set)) else list(optimizers)
+            for opt in opts:
+                if not hasattr(opt, "state"):
+                    continue
+                param_state = opt.state.get(self.raw_generators)
+                if param_state is None:
+                    continue
+                for key in ("exp_avg", "exp_avg_sq", "max_exp_avg_sq", "momentum_buffer"):
+                    buf = param_state.get(key)
+                    if isinstance(buf, Tensor) and buf.ndim >= 1 and buf.shape[0] == self.edge_capacity:
+                        buf.index_fill_(0, slot_ids.to(buf.device), 0.0)
 
     @torch.no_grad()
     def retract_raw_(self) -> None:
@@ -324,10 +358,12 @@ class SOConnectionBank(nn.Module):
     def state_hash(self) -> str:
         h = hashlib.sha256()
         x = self.raw_generators.detach().cpu().contiguous()
+        g = self.slot_generation.detach().cpu().contiguous()
         h.update(self.parameterization.encode())
         h.update(str(self.dim).encode())
         h.update(str(tuple(x.shape)).encode())
         h.update(x.view(torch.uint8).numpy().tobytes())
+        h.update(g.view(torch.uint8).numpy().tobytes())
         return h.hexdigest()
 
     def invariant_error(self) -> tuple[Tensor, Tensor]:

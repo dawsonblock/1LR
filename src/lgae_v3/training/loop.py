@@ -28,6 +28,7 @@ def train_step(
 ) -> Dict[str, object]:
     if core.latent is not engine.fibers:
         raise ValueError("training core and engine must share the same fiber module")
+    engine.register_optimizer(optimizer)
     optimizer.zero_grad(set_to_none=True)
     out = core(
         target=target,

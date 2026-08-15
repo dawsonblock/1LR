@@ -4,7 +4,7 @@
   "manifest_excludes": [
     "MANIFEST.sha256.json"
   ],
-  "file_count": 66,
+  "file_count": 67,
   "files": [
     {
       "path": ".github/workflows/ci.yml",
@@ -13,8 +13,8 @@
     },
     {
       "path": "BUILD_REPORT.md",
-      "bytes": 4088,
-      "sha256": "028932a3295c3429a40893e2d4d9580aee3607330fcef8d9ba7b06a20e80a1b0"
+      "bytes": 4243,
+      "sha256": "e4c8b6a2bfb78c37139da08212e5ada0383a01f69d9a38350b97a7cb403a9150"
     },
     {
       "path": "LICENSE",
@@ -24,7 +24,7 @@
     {
       "path": "README.md",
       "bytes": 10822,
-      "sha256": "c3dbcb26c1c5339d43069c9b64dcebb30739753c84d42bd44c4dcc27cc7d9853"
+      "sha256": "9c7b9682acd5dd87ac9ce681b2610731b44feb3a682146d03cc0441b630d10ac"
     },
     {
       "path": "configs/default.yaml",
@@ -79,7 +79,7 @@
     {
       "path": "release_verification.json",
       "bytes": 1065,
-      "sha256": "82f451d286d2294f6ee51effd70bb92c8d539cf1966ba372594e1ef8f5bdeab6"
+      "sha256": "5f336434c8760d05bdcef28ef3beb92cdf167f5cb8f6301308d675ceab7f51f3"
     },
     {
       "path": "requirements-verified.txt",
@@ -188,13 +188,13 @@
     },
     {
       "path": "src/lgae_v3/evolution.py",
-      "bytes": 18022,
-      "sha256": "9a52da062d046979de4857f1f1352d70c04a6ec7813f955fced229d29ad5c23a"
+      "bytes": 18529,
+      "sha256": "e0904d85ebaa2e0f18633a4e4e0962d79bcc54b7c511a976f15cc05da648db7a"
     },
     {
       "path": "src/lgae_v3/fibers.py",
-      "bytes": 15695,
-      "sha256": "d2e1441d18a05a2714c038d92379ae1353d83a6091bd7783989dca36e85435d4"
+      "bytes": 17405,
+      "sha256": "0ebc293fba27082a76a1b14e85ded61b5587fd79a2a5f23c9dec121e203c49d6"
     },
     {
       "path": "src/lgae_v3/governor.py",
@@ -213,8 +213,8 @@
     },
     {
       "path": "src/lgae_v3/mutations.py",
-      "bytes": 9618,
-      "sha256": "7a112ff50580592c816a08b21d1f7f2df3bcfa353edbb9b88d89345a10e212f2"
+      "bytes": 10032,
+      "sha256": "36ea02d4c087d30f6817ff201b8582a7b082c1803a59f6832406ab91d9819e8b"
     },
     {
       "path": "src/lgae_v3/operators.py",
@@ -248,8 +248,8 @@
     },
     {
       "path": "src/lgae_v3/training/loop.py",
-      "bytes": 2015,
-      "sha256": "a2e3b4078ae07c514757640f9f9e63d99df5660fa3f8c8fa6b4177d2df66adc5"
+      "bytes": 2056,
+      "sha256": "2d8e27f10c02dc1f96e9fd2650e36db06a297a9e99ac7fdea31cbd58f4a4407f"
     },
     {
       "path": "src/lgae_v3/training/utils.py",
@@ -258,8 +258,8 @@
     },
     {
       "path": "src/lgae_v3/types.py",
-      "bytes": 10870,
-      "sha256": "82f398f829a029b751acff7ae4acd0baecc0fe6d4c3f59243fdff154fce00881"
+      "bytes": 12280,
+      "sha256": "7a70b6c5c166a4f42b3a490ff47e9dc0bd837758ae697bf57da71a0cec333c79"
     },
     {
       "path": "tests/test_bakry_cde.py",
@@ -320,6 +320,11 @@
       "path": "tests/test_operators.py",
       "bytes": 1742,
       "sha256": "a03f4cd2ddace2cd265d2ec804224d77950b3046daf1cd8a26b2d75226737df5"
+    },
+    {
+      "path": "tests/test_slot_lifecycle.py",
+      "bytes": 5053,
+      "sha256": "e525bbba359e118b035800212902891d3f07e089d38c7c50d60375e56c466a93"
     },
     {
       "path": "tests/test_training_merge.py",

@@ -38,17 +38,18 @@ Base: `lgae_v3_merged_hardened` v3.1.0.
    - local bridge gate rejects protected disconnecting prunes before expensive global audits;
    - graph and fiber changes remain transactional with shadow rollout and rollback/quarantine.
 
-5. **PyTorch compilation**
+5. **PyTorch compilation & slot lifecycle**
    - discrete surgery, Sinkhorn, and governor decisions remain outside compiled kernels;
    - bucketed fixed-capacity edge buffers;
    - in-place edge-buffer refresh after topology changes;
    - static-width fiber representation retained;
-   - inactive fiber storage is forced to zero after diffusion so dormant channels cannot hide large latent values.
+   - inactive fiber storage is forced to zero after diffusion so dormant channels cannot hide large latent values;
+   - monotonic slot generations (g_e) and optimizer-aware slot resets (m=0, v=0) prevent momentum leakage across slot retirements/reuses.
 
 ## Qualification
 
-- Pytest collection: **69 tests**.
-- Full test suite: **69/69 passed**.
+- Pytest collection: **72 tests**.
+- Full test suite: **72/72 passed**.
 - `scripts/qualify.py`: **PASS**.
 - Editable install with `--no-build-isolation`: **PASS**.
 - Installed CLI version/import check: **PASS** (`3.2.0`).

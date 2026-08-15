@@ -63,11 +63,14 @@ class AddEdge:
         graph.dst[i] = int(self.v)
         graph.weight[i] = w
         graph.valid[i] = True
+        if graph.slot_generation is not None:
+            graph.slot_generation[i] += 1
         if graph.role is not None:
             graph.role[i] = role_code
         graph.bump_version()
         graph.validate()
-        return {"slot": i, "reweighted_existing": False, "role": role_code, "affected_edges": [canonical_edge(self.u, self.v)]}
+        gen = int(graph.slot_generation[i].item()) if graph.slot_generation is not None else 0
+        return {"slot": i, "slot_generation": gen, "reweighted_existing": False, "role": role_code, "affected_edges": [canonical_edge(self.u, self.v)]}
 
 
 @dataclass(slots=True)
@@ -110,9 +113,12 @@ class PruneEdge:
         i = int(ids[0].item())
         graph.valid[i] = False
         graph.weight[i] = 0.0
+        if graph.slot_generation is not None:
+            graph.slot_generation[i] += 1
         graph.bump_version()
         graph.validate()
-        return {"slot": i, "affected_edges": [canonical_edge(self.u, self.v)]}
+        gen = int(graph.slot_generation[i].item()) if graph.slot_generation is not None else 0
+        return {"slot": i, "slot_generation": gen, "affected_edges": [canonical_edge(self.u, self.v)]}
 
 
 @dataclass(slots=True)
