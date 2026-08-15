@@ -1,6 +1,6 @@
-# LGAE-v4.0 Sparse Weighted Geometry Build Report
+# LGAE-v4.1 Metric–Measure Separation Build Report
 
-Build: `4.0.0`
+Build: `4.1.0`
 
 Base: `lgae_v3_merged_hardened` v3.1.0.
 
@@ -70,13 +70,29 @@ Base: `lgae_v3_merged_hardened` v3.1.0.
    - `curvature_weight_mode='weighted'` accepted in config validation;
    - governor audit and fast signals dispatch to weighted backends when configured.
 
+8. **v4.1 Metric–measure separation + multi-horizon certification**
+   - `GraphBuffers` carries independent `weight` (affinity) and `length` (metric) tensors;
+   - default inverse relationship `length = 1/weight` when only one scalar provided;
+   - `make_graph_buffers` accepts `(u,v,a,ell)` 4-tuples for explicit metric-measure;
+   - state hash schema V4 includes both `weight` and `length`;
+   - checkpoint roundtrips both fields; backward compat with old checkpoints (derives length);
+   - mutations (AddEdge/ReweightEdge/PruneEdge/RicciFlow) update both fields;
+   - `graphbuffers_to_networkx` stores both `weight` and `length` attributes;
+   - weighted ORC: ground cost from `length`, measures from `P(affinity)`;
+   - weighted LLY: Lipschitz from `length`, Laplacian from `P(affinity)`;
+   - `weighted_forman_edge`: literature-faithful formula with sqrt weight ratios;
+   - `weighted_af3_proxy`: clearly labeled proxy, not canonical Forman;
+   - `ricci_flow_target`: "weight" or "length", with optional coupling;
+   - `shadow_horizons = [1,2,4,8,16]`: mutation must be admissible across ALL horizons;
+   - scalability claims corrected: bounded-memory exact k-NN, not sub-quadratic ANN.
+
 ## Qualification
 
-- Pytest collection: **112 tests**.
-- Full test suite: **112/112 passed**.
+- Pytest collection: **142 tests**.
+- Full test suite: **142/142 passed**.
 - `scripts/qualify.py`: **PASS**.
 - Editable install with `--no-build-isolation`: **PASS**.
-- Installed CLI version/import check: **PASS** (`4.0.0`).
+- Installed CLI version/import check: **PASS** (`4.1.0`).
 - CPU Inductor fixed-shape compile smoke (`N=32,D=4,E=64`): **PASS**.
 - End-to-end CLI demo: **PASS**; candidate mutation reaches a governed `quarantine` decision rather than numerical failure.
 - Manifest verification: **PASS** (`scripts/generate_manifest.py --check`).

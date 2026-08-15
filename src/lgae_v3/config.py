@@ -111,9 +111,16 @@ class MutationConfig:
     quarantine_on_uncertainty: bool = True
     require_state_hash_match: bool = True
 
+    # Multi-horizon shadow certification (v4.1).
+    # When non-empty, a mutation must remain admissible across ALL horizons.
+    # When empty, falls back to single-horizon shadow_steps.
+    shadow_horizons: list[int] = field(default_factory=list)  # e.g. [1,2,4,8,16]
+
     # Ricci-flow/surgery hardening.
     ricci_flow_dt: float = 0.05
     ricci_target_curvature: float = 0.0
+    ricci_flow_target: str = "weight"  # "weight" (affinity) or "length" (metric)
+    ricci_flow_coupled: bool = True  # inverse-update the other scalar
     edge_cooldown_steps: int = 20
     add_curvature_threshold: float = -0.20
     deadband: float = 0.05
@@ -190,10 +197,14 @@ def validate_config(cfg: LGAEConfig) -> LGAEConfig:
         raise ValueError("shadow_steps cannot be negative")
     if cfg.mutation.shadow_eta < 0:
         raise ValueError("shadow_eta cannot be negative")
+    if any(int(h) < 1 for h in cfg.mutation.shadow_horizons):
+        raise ValueError("shadow_horizons must contain positive integers")
     if not (0 < cfg.mutation.min_edge_weight <= cfg.mutation.max_edge_weight):
         raise ValueError("edge weight clamp must be positive and ordered")
     if cfg.mutation.ricci_flow_dt <= 0:
         raise ValueError("ricci_flow_dt must be positive")
+    if cfg.mutation.ricci_flow_target not in ("weight", "length"):
+        raise ValueError("ricci_flow_target must be 'weight' or 'length'")
     if cfg.mutation.edge_cooldown_steps < 0:
         raise ValueError("edge_cooldown_steps cannot be negative")
     if cfg.mutation.deadband < 0:

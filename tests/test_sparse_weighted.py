@@ -7,7 +7,7 @@ Covers:
 - Sparse: sparse_operator_discrepancy on union support
 - Weighted: weighted_ollivier_edge uses edge weights in lazy measure
 - Weighted: weighted_lly_laplacian_lp uses weighted degree
-- Weighted: weighted_af3_edge uses weighted degree
+- Weighted: weighted_af3_proxy uses weighted degree
 - Weighted: governor audit uses weighted curvature when configured
 """
 from __future__ import annotations
@@ -30,7 +30,8 @@ from lgae_v3.operators import (
 )
 from lgae_v3.curvature import (
     af3_edge,
-    weighted_af3_edge,
+    weighted_af3_proxy,
+    weighted_forman_edge,
     ollivier_edge,
     weighted_ollivier_edge,
     lly_laplacian_lp,
@@ -217,7 +218,7 @@ def test_weighted_lly_nonuniform_weights_finite():
 # Weighted: weighted AF3
 # ---------------------------------------------------------------------------
 
-def test_weighted_af3_uniform_weights_matches_unweighted():
+def test_weighted_af3_proxy_uniform_weights_matches_unweighted():
     """With uniform weights, weighted AF3 should match unweighted."""
     g = nx.Graph()
     g.add_edge(0, 1, weight=1.0)
@@ -225,11 +226,11 @@ def test_weighted_af3_uniform_weights_matches_unweighted():
     g.add_edge(0, 2, weight=1.0)
     g.add_edge(2, 3, weight=1.0)
     k_uw = af3_edge(g, 0, 1)
-    k_w = weighted_af3_edge(g, 0, 1)
+    k_w = weighted_af3_proxy(g, 0, 1)
     assert k_uw == pytest.approx(k_w, abs=1e-6)
 
 
-def test_weighted_af3_nonuniform_weights():
+def test_weighted_af3_proxy_nonuniform_weights():
     """Weighted AF3 with non-uniform weights should be finite and differ."""
     g = nx.Graph()
     g.add_edge(0, 1, weight=5.0)
@@ -237,7 +238,7 @@ def test_weighted_af3_nonuniform_weights():
     g.add_edge(0, 2, weight=0.5)
     g.add_edge(2, 3, weight=2.0)
     k_uw = af3_edge(g, 0, 1)
-    k_w = weighted_af3_edge(g, 0, 1)
+    k_w = weighted_af3_proxy(g, 0, 1)
     assert np.isfinite(k_w)
     # Weighted version uses weighted degree which differs
     assert k_uw != pytest.approx(k_w, abs=1e-3)

@@ -58,67 +58,78 @@ def lly_laplacian_lp(g: nx.Graph, x: int, y: int, *, normalized: bool = True) ->
 
 
 def weighted_lly_laplacian_lp(g: nx.Graph, x: int, y: int) -> float:
-    """Weighted limit-free LLY by finite Lipschitz linear programming.
+    """Weighted limit-free LLY with metric-measure separation.
 
-    Uses the weighted normalized Laplacian: Δ = I - D_w^{-1} W, where
-    D_w is the weighted degree matrix and W is the weighted adjacency.
+    Uses the **affinity-based** normalized Laplacian:
+        Δ f(x) = Σ_y P_a(x,y) [f(y) - f(x)]
+    where P_a(x,y) = a_{xy} / Σ_j a_{xj}.
 
-    The Lipschitz constraint is unit per unit weighted distance:
-    |f(a) - f(b)| <= w_{ab} for each edge (a,b).
-    The boundary condition is f(y) - f(x) = d(x,y) (the weighted shortest
-    path distance, not the direct edge weight, to ensure feasibility when
-    the direct edge is not the shortest path).
-    The curvature is then κ = (Δf(x) - Δf(y)) / d(x,y).
+    The Lipschitz constraint uses **metric length**:
+        |f(a) - f(b)| ≤ ℓ_{ab}  for each edge (a,b)
+
+    The boundary condition uses the shortest-path metric:
+        f(x) = 0, f(y) = d_ℓ(x,y)
+
+    This cleanly separates the Laplacian (from affinity) from the Lipschitz
+    metric (from length), matching the Bai–Huang–Lu–Yau formulation where
+    the metric d and the transition rule P are independent.
+
+    κ_LLY(x,y) = inf[Δf(x) - Δf(y)] / d_ℓ(x,y)
     """
     if not g.has_edge(x, y):
         raise ValueError("weighted LLY currently expects adjacent vertices")
-    w_xy = float(g[x][y].get("weight", 1.0))
-    if w_xy <= 0:
-        raise ValueError("edge weight must be positive for weighted LLY")
 
-    # Use weighted shortest path distance for boundary condition
-    d_xy = float(nx.dijkstra_path_length(g, x, y, weight="weight"))
+    # Ensure all edges have a length attribute (default: 1/weight)
+    for a, b in g.edges():
+        if "length" not in g[a][b]:
+            w = g[a][b].get("weight", 1.0)
+            g[a][b]["length"] = 1.0 / w if w > 0 else 1.0
+
+    # Shortest-path distance in the metric d_ℓ
+    d_xy = float(nx.dijkstra_path_length(g, x, y, weight="length"))
 
     nodes = list(g.nodes())
     idx = {n: i for i, n in enumerate(nodes)}
     n = len(nodes)
 
-    # Weighted degree: sum of edge weights
-    def wdeg(node):
+    # Affinity-based weighted degree: sum of edge affinities
+    def adeg(node):
         return float(sum(g[node][z].get("weight", 1.0) for z in g.neighbors(node)))
 
-    dx = wdeg(x)
-    dy = wdeg(y)
+    dx = adeg(x)
+    dy = adeg(y)
     if dx <= 0 or dy <= 0:
-        raise ValueError("weighted degree must be positive for weighted LLY")
+        raise ValueError("affinity degree must be positive for weighted LLY")
 
-    # Cost vector: Δf(x) - Δf(y) = (f(x) - P_w f(x)) - (f(y) - P_w f(y))
+    # Cost vector: Δf(x) - Δf(y) using affinity-based Laplacian
+    # P_a f(x) = Σ_z a_{xz}/dx * f(z)
+    # Δf(x) = f(x) - P_a f(x)
     c = np.zeros(n, dtype=float)
     for z in g.neighbors(x):
-        w = g[x][z].get("weight", 1.0)
-        c[idx[z]] += w / dx
+        a = g[x][z].get("weight", 1.0)  # affinity
+        c[idx[z]] += a / dx
     c[idx[x]] -= 1.0
     for z in g.neighbors(y):
-        w = g[y][z].get("weight", 1.0)
-        c[idx[z]] -= w / dy
+        a = g[y][z].get("weight", 1.0)  # affinity
+        c[idx[z]] -= a / dy
     c[idx[y]] += 1.0
 
-    # Lipschitz constraints: |f(a) - f(b)| <= w_{ab} (unit per weighted distance)
+    # Lipschitz constraints: |f(a) - f(b)| ≤ ℓ_{ab} (metric length)
     Aub = []
     bub = []
     for a, b in g.edges():
-        w = g[a][b].get("weight", 1.0)
-        if w <= 0:
+        ell = g[a][b].get("length", 1.0 / g[a][b].get("weight", 1.0))
+        if ell <= 0:
             continue
         row = np.zeros(n)
         row[idx[a]] = 1.0
         row[idx[b]] = -1.0
         Aub.append(row)
-        bub.append(w)
+        bub.append(ell)
         Aub.append(-row)
-        bub.append(w)
+        bub.append(ell)
 
-    # Boundary: f(x) = 0, f(y) = d_xy (shortest path distance)
+    # Boundary: f(x) = 0, f(y) = d_ℓ(x,y) (shortest path in metric)
     Aeq = []
     beq = []
     row = np.zeros(n)
@@ -137,7 +148,6 @@ def weighted_lly_laplacian_lp(g: nx.Graph, x: int, y: int) -> float:
     )
     if not res.success:
         raise RuntimeError(f"weighted LLY LP failed: {res.message}")
-    # Normalize by shortest path distance to get curvature
     return float(res.fun) / d_xy
 
 

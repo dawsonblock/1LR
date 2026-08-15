@@ -1,13 +1,13 @@
 <div align="center">
 
-# LGAE-v4.0 / 1LR: Governed Adaptive Geometry Engine
+# LGAE-v4.1 / 1LR: Governed Adaptive Geometry Engine
 
 **A Multi-Timescale Geometric Controller for Self-Evolving Graph and Fiber-Bundle Latent Spaces**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.6+](https://img.shields.io/badge/PyTorch-2.6+-ee4c2c.svg)](https://pytorch.org/)
 [![CI Status](https://github.com/dawsonblock/1LR/actions/workflows/ci.yml/badge.svg)](https://github.com/dawsonblock/1LR/actions)
-[![Tests](https://img.shields.io/badge/tests-112%2F112%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-142%2F142%20passing-brightgreen.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Gauge: SO(d)](https://img.shields.io/badge/gauge-SO(d)%20Invariance-purple.svg)]()
 
@@ -17,7 +17,19 @@
 
 ## Overview
 
-**LGAE-v4.0 (`1LR`)** is a hardened geometric deep learning engine and dynamical controller. It operates over graph-structured data and continuous fiber bundles, combining continuous field diffusion, Lie-algebra gauge connections, discrete Ricci-flow surgery, and multi-operator curvature diagnostics.
+**LGAE-v4.1 (`1LR`)** is a hardened geometric deep learning engine and dynamical controller. It operates over graph-structured data and continuous fiber bundles, combining continuous field diffusion, Lie-algebra gauge connections, discrete Ricci-flow surgery, and multi-operator curvature diagnostics.
+
+### v4.1 — Metric–Measure Separation + Multi-Horizon Certification
+
+This release closes the metric/affinity semantic gap identified in the v4.0 review:
+
+- **Metric–measure separation**: The graph state now carries two independent edge scalars: `weight` = **affinity** (conductance, transition probability) and `length` = **metric length** (geometric distance). The Markov operator uses `P_uv = a_uv / Σ a_uj` (affinity), while shortest-path distances and curvature ground costs use `d_ℓ(x,y) = shortestpath_ℓ(x,y)` (length). This gives the system a coherent `(V, d_ℓ, P_a, m)` metric-measure structure instead of overloading one scalar.
+- **Weighted ORC**: ground cost from `length`, lazy measures from `P(affinity)` — cleanly separating "how far apart are states?" from "how likely is information to move?"
+- **Weighted LLY**: Lipschitz constraint from `length`, Laplacian from `P(affinity)` — matching the Bai–Huang–Lu–Yau formulation where metric `d` and transition rule `P` are independent.
+- **Literature-faithful weighted Forman**: `weighted_forman_edge` implements the canonical formula with explicit square-root weight ratios. The old degree-substitution heuristic is retained as `weighted_af3_proxy` (clearly labeled, not claiming canonical status).
+- **Ricci flow target selection**: `ricci_flow_target` config selects whether Ricci flow modifies `length` (geometrically canonical) or `weight` (affinity), with optional coupling.
+- **Multi-horizon shadow certification**: `shadow_horizons = [1, 2, 4, 8, 16]` requires a mutation to remain admissible across ALL horizons, not just one rollout length.
+- **Scalability claims corrected**: sparse operator storage is O(Nk), but k-NN construction is O(N²D) compute with bounded memory via chunking. Documented as "bounded-memory exact k-NN", not sub-quadratic ANN.
 
 ### v4.0 — Sparse Weighted Geometry
 
@@ -317,7 +329,7 @@ python scripts/generate_manifest.py --check   # verify manifest
 │   ├── operators.py          # Actuation & diagnostic Markov operators
 │   ├── receipts.py           # Cryptographic receipt logging
 │   └── topology.py           # NetworkX conversion, Betti numbers & PH
-└── tests/                    # 18 test modules with 112 verified unit/regression tests
+└── tests/                    # 19 test modules with 142 verified unit/regression tests
 ```
 
 ---

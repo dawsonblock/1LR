@@ -333,6 +333,8 @@ class LGAEEngine(nn.Module):
             dt=self.cfg.mutation.ricci_flow_dt,
             min_weight=self.cfg.mutation.min_edge_weight,
             max_weight=self.cfg.mutation.max_edge_weight,
+            target_field=self.cfg.mutation.ricci_flow_target,
+            coupled=self.cfg.mutation.ricci_flow_coupled,
         )
 
     @torch.no_grad()

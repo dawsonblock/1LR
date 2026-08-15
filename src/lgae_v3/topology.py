@@ -12,9 +12,15 @@ def graphbuffers_to_networkx(graph: GraphBuffers) -> nx.Graph:
     g = nx.Graph()
     g.add_nodes_from(range(graph.num_nodes))
     src, dst, w = graph.active()
+    lengths = graph.active_length()
     roles = graph.active_roles()
-    for u, v, ww, rr in zip(src.tolist(), dst.tolist(), w.tolist(), roles.tolist()):
-        g.add_edge(int(u), int(v), weight=float(ww), role=edge_role_from_code(int(rr)).value)
+    for u, v, ww, ell, rr in zip(src.tolist(), dst.tolist(), w.tolist(), lengths.tolist(), roles.tolist()):
+        g.add_edge(
+            int(u), int(v),
+            weight=float(ww),  # affinity/conductance
+            length=float(ell),  # metric length
+            role=edge_role_from_code(int(rr)).value,
+        )
     return g
 
 

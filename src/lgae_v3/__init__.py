@@ -24,4 +24,4 @@ __all__ = [
     "DualOperatorState", "SparseDualOperatorState", "EdgeRole", "GraphBuffers", "make_graph_buffers", "make_bucketed_graph_buffers", "round_edge_capacity",
     "MutationDecision", "MutationResult", "RicciFlowReweight", "MutationCooldownTracker", "LGAETrainCore", "train_step", "padded_markov_edges", "refresh_padded_markov_edges_", "padded_markov_edges_with_slots", "refresh_padded_markov_edges_with_slots_",
 ]
-__version__ = "3.3.0"
+__version__ = "4.1.0"

@@ -193,11 +193,16 @@ def operator_discrepancy(p_act: Tensor, p_diag: Tensor, mode: str = "frobenius")
 
 
 def _knn_distances(z: Tensor, k: int) -> tuple[Tensor, Tensor]:
-    """Compute k-nearest-neighbor distances and indices without full N×N matrix.
+    """Compute k-nearest-neighbor distances and indices.
 
-    Uses torch.cdist for moderate N (still O(N²k) but lower constant than
-    materializing the full matrix) and falls back to chunked computation
-    for very large N to bound peak memory.
+    For moderate N (≤4096), uses torch.cdist directly. For larger N, uses
+    chunked computation to bound peak memory to O(B*N*D) where B is the
+    chunk size, but total compute remains O(N²D).
+
+    **Scalability note:** This is bounded-memory exact k-NN, not sub-quadratic
+    ANN. The sparse *storage* is O(Nk), but the *construction* is still
+    O(N²D) compute. True large-N scalability requires an ANN index (e.g.
+    FAISS, HNSW) which is a future extension.
 
     Returns (distances, indices) of shape [N, k] where distances are squared
     Euclidean distances and indices are the column indices of the nearest
@@ -248,8 +253,12 @@ def diagnostic_diffusion_edges(
     diffusion kernel, without materializing an N×N matrix. Uses k-NN to
     select support, then applies a Gaussian kernel with local scaling.
 
+    **Scalability:** The sparse *storage* is O(Nk), but the k-NN
+    *construction* is O(N²D) compute with O(BN) peak memory via chunking.
+    This is bounded-memory exact k-NN, not sub-quadratic ANN. True
+    large-N behavior requires an ANN index (future extension).
+
     This is the sparse counterpart to ``diagnostic_diffusion_operator``.
-    Memory: O(Nk) instead of O(N²).
     """
     n = z.shape[0]
     if n == 0:
@@ -383,9 +392,11 @@ class SparseDualOperatorState:
     lists (src, dst, weight) where weight is row-stochastic. This avoids
     the O(N²) memory of the dense DualOperatorState.
 
-    For small N, the dense DualOperatorState is preferred as an exact
-    reference. For large N, this sparse representation scales as
-    O(|E_act| + N*k) where k is the diagnostic k-NN parameter.
+    **Scalability:** Sparse storage is O(|E_act| + N*k), but the k-NN
+    construction for the diagnostic operator is O(N²D) compute with
+    bounded memory. This is not sub-quadratic ANN. The sparse discrepancy
+    is exact for the truncated operator, not for the hypothetical full
+    Gaussian kernel from which top-k edges were selected.
     """
     act_src: Tensor
     act_dst: Tensor

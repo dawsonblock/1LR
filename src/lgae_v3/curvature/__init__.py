@@ -1,4 +1,8 @@
-from .forman import af3_edge, af3_curvatures, degree_weighted_af3_proxy, weighted_af3_edge, weighted_af3_curvatures
+from .forman import (
+    af3_edge, af3_curvatures, degree_weighted_af3_proxy,
+    weighted_af3_proxy, weighted_af3_proxy_curvatures,
+    weighted_forman_edge, weighted_forman_curvatures,
+)
 from .ollivier import ollivier_edge, ollivier_curvatures, multiscale_ollivier_edge, log_sinkhorn_wasserstein, weighted_ollivier_edge
 from .lly import lly_half_idleness, lly_laplacian_lp, integral_lly_deficit, crosscheck_lly, weighted_lly_half_idleness, weighted_lly_laplacian_lp
 from .entropic import (
@@ -12,7 +16,9 @@ from .bakry_emery import bakry_emery_curvature, bakry_emery_curvature_matrix, st
 from .cde import sampled_cde_prime_residual
 
 __all__ = [
-    "af3_edge", "af3_curvatures", "degree_weighted_af3_proxy", "weighted_af3_edge", "weighted_af3_curvatures",
+    "af3_edge", "af3_curvatures", "degree_weighted_af3_proxy",
+    "weighted_af3_proxy", "weighted_af3_proxy_curvatures",
+    "weighted_forman_edge", "weighted_forman_curvatures",
     "ollivier_edge", "ollivier_curvatures", "multiscale_ollivier_edge", "log_sinkhorn_wasserstein", "weighted_ollivier_edge",
     "lly_half_idleness", "lly_laplacian_lp", "integral_lly_deficit", "crosscheck_lly",
     "weighted_lly_half_idleness", "weighted_lly_laplacian_lp",

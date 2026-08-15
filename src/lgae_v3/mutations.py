@@ -33,7 +33,8 @@ def _find_edge(graph: GraphBuffers, u: int, v: int) -> torch.Tensor:
 class AddEdge:
     u: int
     v: int
-    weight: float = 1.0
+    weight: float = 1.0  # affinity
+    length: float | None = None  # metric length; defaults to 1/weight
     role: EdgeRole | str | int = EdgeRole.GENERIC
     name: str = "add_edge"
 
@@ -41,7 +42,10 @@ class AddEdge:
         _validate_endpoint(graph, self.u, self.v)
         w = float(self.weight)
         if not math.isfinite(w) or w <= 0:
-            raise ValueError("edge weight must be finite and positive")
+            raise ValueError("edge weight (affinity) must be finite and positive")
+        ell = float(self.length) if self.length is not None else (1.0 / w)
+        if not math.isfinite(ell) or ell <= 0:
+            raise ValueError("edge length must be finite and positive")
         role_code = edge_role_code(self.role)
         existing = _find_edge(graph, self.u, self.v)
         if existing.numel():
@@ -50,6 +54,11 @@ class AddEdge:
             if not math.isfinite(new_w) or new_w <= 0:
                 raise ValueError("reweighted edge became invalid")
             graph.weight[i] = new_w
+            if graph.length is not None:
+                # When merging, use harmonic mean of lengths (resistors in parallel)
+                old_ell = float(graph.length[i].item())
+                if old_ell > 0 and ell > 0:
+                    graph.length[i] = 1.0 / (1.0 / old_ell + 1.0 / ell)
             if graph.role is not None:
                 graph.role[i] = role_code
             graph.bump_version()
@@ -62,6 +71,8 @@ class AddEdge:
         graph.src[i] = int(self.u)
         graph.dst[i] = int(self.v)
         graph.weight[i] = w
+        if graph.length is not None:
+            graph.length[i] = ell
         graph.valid[i] = True
         if graph.slot_generation is not None:
             graph.slot_generation[i] += 1
@@ -75,6 +86,8 @@ class AddEdge:
 
 @dataclass(slots=True)
 class ReweightEdge:
+    """Reweight affinity. When length is present, inverse-update it: factor>1
+    (stronger connection) shortens length by 1/factor."""
     u: int
     v: int
     factor: float = 1.1
@@ -94,6 +107,9 @@ class ReweightEdge:
             raise ValueError("edge not found")
         i = int(ids[0].item())
         graph.weight[i] = torch.clamp(graph.weight[i] * factor, self.min_weight, self.max_weight)
+        if graph.length is not None:
+            # Inverse update: stronger affinity → shorter length
+            graph.length[i] = torch.clamp(graph.length[i] / factor, 1.0 / self.max_weight, 1.0 / self.min_weight)
         graph.bump_version()
         graph.validate()
         return {"slot": i, "new_weight": float(graph.weight[i].item()), "affected_edges": [canonical_edge(self.u, self.v)]}
@@ -113,6 +129,8 @@ class PruneEdge:
         i = int(ids[0].item())
         graph.valid[i] = False
         graph.weight[i] = 0.0
+        if graph.length is not None:
+            graph.length[i] = 0.0
         if graph.slot_generation is not None:
             graph.slot_generation[i] += 1
         graph.bump_version()
@@ -128,12 +146,20 @@ class RicciFlowReweight:
     The update is w' = clamp(w * exp(-dt * (kappa-target)), [min,max]), so positive
     weights remain positive by construction. ``curvatures`` uses canonical undirected
     edge tuples and may cover only a subset of active edges.
+
+    ``target_field`` selects which edge scalar the flow modifies:
+    - ``"weight"`` (default, backward compat): modifies affinity/conductance.
+    - ``"length"``: modifies metric length (geometrically canonical for Ricci flow).
+    When one field is modified, the other is inverse-updated to preserve the
+    default relationship unless ``coupled=False``.
     """
     curvatures: dict[tuple[int, int], float]
     target_curvature: float = 0.0
     dt: float = 0.05
     min_weight: float = 1e-3
     max_weight: float = 10.0
+    target_field: str = "weight"  # "weight" (affinity) or "length"
+    coupled: bool = True  # inverse-update the other field
     name: str = "ricci_flow_reweight"
 
     def apply(self, graph: GraphBuffers) -> dict:
@@ -141,6 +167,8 @@ class RicciFlowReweight:
             raise ValueError("dt must be finite and positive")
         if not (math.isfinite(self.target_curvature) and 0 < self.min_weight <= self.max_weight):
             raise ValueError("invalid Ricci-flow parameters")
+        if self.target_field not in ("weight", "length"):
+            raise ValueError("target_field must be 'weight' or 'length'")
         changed: list[tuple[int, int]] = []
         slots: list[int] = []
         for edge, kval in self.curvatures.items():
@@ -155,9 +183,25 @@ class RicciFlowReweight:
             i = int(ids[0].item())
             exponent = max(-50.0, min(50.0, -float(self.dt) * (kappa - float(self.target_curvature))))
             factor = math.exp(exponent)
-            new_w = float(graph.weight[i].item()) * factor
-            new_w = max(float(self.min_weight), min(float(self.max_weight), new_w))
-            graph.weight[i] = new_w
+            if self.target_field == "weight":
+                new_w = float(graph.weight[i].item()) * factor
+                new_w = max(float(self.min_weight), min(float(self.max_weight), new_w))
+                graph.weight[i] = new_w
+                if self.coupled and graph.length is not None:
+                    graph.length[i] = torch.clamp(
+                        graph.length[i] / factor,
+                        1.0 / self.max_weight, 1.0 / self.min_weight,
+                    )
+            else:  # target_field == "length"
+                if graph.length is None:
+                    continue
+                new_ell = float(graph.length[i].item()) * factor
+                new_ell = max(1.0 / self.max_weight, min(1.0 / self.min_weight, new_ell))
+                graph.length[i] = new_ell
+                if self.coupled:
+                    graph.weight[i] = torch.clamp(
+                        graph.weight[i] / factor, self.min_weight, self.max_weight,
+                    )
             changed.append((u, v))
             slots.append(i)
         if changed:

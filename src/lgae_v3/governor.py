@@ -10,7 +10,8 @@ from .config import LGAEConfig
 from .curvature import (
     af3_edge,
     degree_weighted_af3_proxy,
-    weighted_af3_edge,
+    weighted_af3_proxy,
+    weighted_forman_edge,
     lly_laplacian_lp,
     lly_half_idleness,
     weighted_lly_laplacian_lp,
@@ -110,22 +111,23 @@ class GeometryGovernor:
         m = edge_diffusion_metrics(z, src, dst, pw, graph.num_nodes)
         g = graphbuffers_to_networkx(graph)
         if self.cfg.audit.curvature_weight_mode == "weighted":
-            af = {(int(u), int(v)): weighted_af3_edge(g, int(u), int(v)) for u, v in g.edges()}
+            af = {(int(u), int(v)): weighted_forman_edge(g, int(u), int(v)) for u, v in g.edges()}
         else:
             af = {(int(u), int(v)): af3_edge(g, int(u), int(v)) for u, v in g.edges()}
         waf = {(int(u), int(v)): degree_weighted_af3_proxy(g, int(u), int(v)) for u, v in g.edges()}
         return FastSignals(m["gamma"], m["radius"], m["local_var"], af, waf)
 
-    def shadow_rollout(self, graph: GraphBuffers, z: Tensor, gauge_bank=None) -> Tensor:
+    def shadow_rollout(self, graph: GraphBuffers, z: Tensor, gauge_bank=None, *, steps: int | None = None) -> Tensor:
+        """Run shadow diffusion rollout for ``steps`` steps (default: config shadow_steps)."""
         out = z.detach().clone()
-        steps = int(self.cfg.mutation.shadow_steps)
-        if steps <= 0:
+        n_steps = int(self.cfg.mutation.shadow_steps) if steps is None else int(steps)
+        if n_steps <= 0:
             return out
         if gauge_bank is None or self.cfg.fiber.gauge_dim <= 0:
             src, dst, pw = actuation_markov_edges(
                 graph, symmetric=self.cfg.operator.symmetric_actuation, self_loop=self.cfg.operator.self_loop,
             )
-            for _ in range(steps):
+            for _ in range(n_steps):
                 out = sparse_laplacian_step(
                     out, src, dst, pw, eta=float(self.cfg.mutation.shadow_eta), num_nodes=graph.num_nodes,
                 )
@@ -136,7 +138,7 @@ class GeometryGovernor:
             graph, symmetric=self.cfg.operator.symmetric_actuation, self_loop=self.cfg.operator.self_loop,
         )
         conn = directed_so_matrices(gauge_bank, slots, reverse)
-        for _ in range(steps):
+        for _ in range(n_steps):
             out = sparse_laplacian_step_gauge(
                 out, src, dst, pw, conn, gauge_dim=self.cfg.fiber.gauge_dim,
                 eta=float(self.cfg.mutation.shadow_eta), num_nodes=graph.num_nodes,
@@ -421,6 +423,57 @@ class GeometryGovernor:
                 ),
                 shadow,
             )
+
+        # Multi-horizon shadow certification (v4.1).
+        # When shadow_horizons is configured, the mutation must remain
+        # admissible across ALL horizons, not just the default shadow_steps.
+        horizons = self.cfg.mutation.shadow_horizons
+        horizon_results: list[dict] = []
+        if horizons:
+            for h in horizons:
+                if h == self.cfg.mutation.shadow_steps:
+                    # Already evaluated at this horizon
+                    horizon_results.append({
+                        "horizon": int(h),
+                        "delta_norm": float(torch.linalg.vector_norm(z_shadow - z).item()),
+                    })
+                    continue
+                try:
+                    z_h = self.shadow_rollout(shadow, z, gauge_bank=gauge_bank, steps=int(h))
+                    after_h = self.audit(shadow, z_h, seed=seed)
+                    h_result = self._decide_transition(
+                        before, after_h,
+                        transition_name=getattr(mutation, "name", type(mutation).__name__),
+                        metadata={"horizon": int(h)},
+                    )
+                    horizon_results.append({
+                        "horizon": int(h),
+                        "delta_norm": float(torch.linalg.vector_norm(z_h - z).item()),
+                        "decision": h_result.decision.value,
+                    })
+                    # If any horizon rejects, the mutation is rejected
+                    if h_result.decision == MutationDecision.REJECT:
+                        return MutationResult(
+                            MutationDecision.REJECT,
+                            [f"multi_horizon_reject_at_H={h}"] + h_result.reasons,
+                            before=before,
+                            after=after_h,
+                            metadata={
+                                "mutation": getattr(mutation, "name", type(mutation).__name__),
+                                "multi_horizon": horizon_results,
+                            },
+                        ), shadow
+                except Exception as exc:
+                    return MutationResult(
+                        MutationDecision.REJECT,
+                        [f"multi_horizon_shadow_failed_at_H={h}:{exc}"],
+                        before=before,
+                        metadata={
+                            "mutation": getattr(mutation, "name", type(mutation).__name__),
+                            "multi_horizon": horizon_results,
+                        },
+                    ), shadow
+
         metadata = {
             **metadata,
             "base_graph_version": int(graph.version),
@@ -430,6 +483,8 @@ class GeometryGovernor:
             "shadow_steps": int(self.cfg.mutation.shadow_steps),
             "shadow_latent_delta_norm": float(torch.linalg.vector_norm(z_shadow - z).item()),
         }
+        if horizon_results:
+            metadata["multi_horizon"] = horizon_results
         result = self._decide_transition(
             before,
             after,

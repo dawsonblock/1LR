@@ -18,11 +18,11 @@ def _lazy_measure(g: nx.Graph, x: int, p: float) -> tuple[list[int], np.ndarray]
 
 
 def _weighted_lazy_measure(g: nx.Graph, x: int, p: float) -> tuple[list[int], np.ndarray]:
-    """Weight-aware lazy random-walk measure.
+    """Affinity-based lazy random-walk measure.
 
     The idle mass p stays at x; the remaining (1-p) is distributed to
-    neighbors proportionally to edge weights (not uniformly). This is the
-    correct lazy measure for a weighted graph Markov chain.
+    neighbors proportionally to edge **affinity** (the ``weight`` attribute).
+    This is the correct lazy measure for the Markov chain P(a).
     """
     nbrs = list(g.neighbors(x))
     if not nbrs:
@@ -156,17 +156,23 @@ def _edge_cost(g: nx.Graph, left: list[int], right: list[int]) -> np.ndarray:
 
 
 def _weighted_edge_cost(g: nx.Graph, left: list[int], right: list[int]) -> np.ndarray:
-    """Weighted shortest-path cost matrix.
+    """Metric-length shortest-path cost matrix.
 
-    Uses Dijkstra with edge weights as distances. This is the correct
-    ground cost for weighted Ollivier curvature.
+    Uses Dijkstra with edge ``length`` attribute as distances. Falls back
+    to ``1/weight`` (inverse affinity) when ``length`` is not present,
+    matching the default metric-measure relationship.
     """
+    # Ensure all edges have a length attribute (default: 1/weight)
+    for a, b in g.edges():
+        if "length" not in g[a][b]:
+            w = g[a][b].get("weight", 1.0)
+            g[a][b]["length"] = 1.0 / w if w > 0 else 1.0
     cost = np.empty((len(left), len(right)), dtype=float)
     for i, x in enumerate(left):
-        lengths = nx.single_source_dijkstra_path_length(g, x, weight="weight")
+        lengths = nx.single_source_dijkstra_path_length(g, x, weight="length")
         for j, y in enumerate(right):
             if y not in lengths:
-                raise ValueError("weighted Ollivier transport requires connected support metric")
+                raise ValueError("metric-length Ollivier transport requires connected support metric")
             cost[i, j] = lengths[y]
     return cost
 
@@ -223,11 +229,17 @@ def weighted_ollivier_edge(
     sinkhorn_max_iter: int = 200,
     sinkhorn_tolerance: float = 1e-6,
 ) -> float:
-    """p-idle Ollivier curvature on a weighted graph edge.
+    """p-idle Ollivier curvature with metric-measure separation.
 
-    The lazy measure distributes (1-p) mass to neighbors proportionally
-    to edge weights. The ground cost uses weighted shortest-path distances
-    (Dijkstra). This is the weighted counterpart to ``ollivier_edge``.
+    The lazy measure μ_x distributes (1-p) mass to neighbors proportionally
+    to edge **affinity** (``weight`` attribute). The Wasserstein ground cost
+    uses **metric length** (``length`` attribute) via Dijkstra shortest path.
+
+    This cleanly separates:
+    - How far apart are states? → d_ℓ (from length)
+    - How likely is information to move? → P(a) (from affinity)
+
+    κ(x,y) = 1 - W₁^{d_ℓ}(μ_x, μ_y) / d_ℓ(x,y)
     """
     if not (0.0 <= p <= 1.0):
         raise ValueError("p must lie in [0,1]")
@@ -235,9 +247,9 @@ def weighted_ollivier_edge(
         raise ValueError("weighted_ollivier_edge currently expects an edge")
     if backend not in {"exact_lp", "sinkhorn_log"}:
         raise ValueError("unknown Ollivier backend")
-    left, a = _weighted_lazy_measure(g, u, p)
+    left, a = _weighted_lazy_measure(g, u, p)  # measures from affinity
     right, b = _weighted_lazy_measure(g, v, p)
-    cost = _weighted_edge_cost(g, left, right)
+    cost = _weighted_edge_cost(g, left, right)  # cost from length
     if backend == "exact_lp":
         w1 = _transport_lp(cost, a, b)
     else:
@@ -245,7 +257,11 @@ def weighted_ollivier_edge(
             cost, a, b, epsilon=sinkhorn_epsilon,
             max_iter=sinkhorn_max_iter, tolerance=sinkhorn_tolerance,
         )
-    d = nx.dijkstra_path_length(g, u, v, weight="weight")
+    # Ensure length attribute exists for distance computation
+    if "length" not in g[u][v]:
+        w = g[u][v].get("weight", 1.0)
+        g[u][v]["length"] = 1.0 / w if w > 0 else 1.0
+    d = nx.dijkstra_path_length(g, u, v, weight="length")  # d_ℓ(x,y)
     return float(1.0 - w1 / float(d))
 
 

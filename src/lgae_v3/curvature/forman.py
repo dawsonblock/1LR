@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import networkx as nx
 
 
@@ -34,45 +35,79 @@ def degree_weighted_af3_proxy(g: nx.Graph, u: int, v: int) -> float:
     return float(base / scale)
 
 
-def weighted_af3_edge(g: nx.Graph, u: int, v: int) -> float:
-    """Edge-weight-aware Augmented Forman-3 curvature.
+def weighted_af3_proxy(g: nx.Graph, u: int, v: int) -> float:
+    """Weighted-degree AF3 proxy (not canonical weighted Forman).
 
-    For a weighted graph, the Forman curvature scales with the edge weight
-    relative to the weighted degrees. The formula adapts AF3 to weighted
-    edges by replacing unweighted degree with weighted degree (sum of edge
-    weights) and scaling by the edge weight:
-
-        κ_w(u,v) = w_{uv} * [4/w_{uv} - deg_w(u)/w_{uv} - deg_w(v)/w_{uv}
-                              + 3*T(u,v)/w_{uv}]
-
-    Simplified for the normalized case where w_{uv} is the reference scale:
-
-        κ_w(u,v) = 4 - deg_w(u) - deg_w(v) + 3*T(u,v)
-
-    where deg_w is the weighted degree (sum of incident edge weights) and
-    T(u,v) is the number of triangles containing (u,v).
-
-    This is a weighted adaptation of AF3, not a paper-exact weighted Forman
-    curvature. The triangle count remains unweighted since AF3's triangle
-    term counts shared neighbors, not weighted paths.
+    This is a cheap heuristic that substitutes weighted degree (sum of edge
+    affinities) for unweighted degree in the AF3 formula. It is NOT the
+    literature-faithful weighted Forman curvature, which requires explicit
+    square-root weight ratios. Use ``weighted_forman_edge`` for the
+    canonical formula.
     """
     if not g.has_edge(u, v):
         raise ValueError(f"({u},{v}) is not an edge")
     w_uv = float(g[u][v].get("weight", 1.0))
     if w_uv <= 0:
-        raise ValueError("edge weight must be positive for weighted AF3")
+        raise ValueError("edge affinity must be positive for weighted AF3 proxy")
 
-    # Weighted degree: sum of edge weights
     deg_w_u = float(sum(g[u][z].get("weight", 1.0) for z in g.neighbors(u)))
     deg_w_v = float(sum(g[v][z].get("weight", 1.0) for z in g.neighbors(v)))
-
-    # Triangle count (unweighted — shared neighbors)
     common = len(set(g.neighbors(u)).intersection(g.neighbors(v)))
-
-    # Scale the unweighted AF3 formula by the edge weight ratio.
-    # The weighted degree replaces unweighted degree.
     return float(w_uv * (4.0 / w_uv - deg_w_u / w_uv - deg_w_v / w_uv + 3.0 * common / w_uv))
 
 
-def weighted_af3_curvatures(g: nx.Graph) -> dict[tuple[int, int], float]:
-    return {(int(u), int(v)): weighted_af3_edge(g, int(u), int(v)) for u, v in g.edges()}
+def weighted_af3_proxy_curvatures(g: nx.Graph) -> dict[tuple[int, int], float]:
+    return {(int(u), int(v)): weighted_af3_proxy(g, int(u), int(v)) for u, v in g.edges()}
+
+
+def weighted_forman_edge(g: nx.Graph, u: int, v: int) -> float:
+    """Literature-faithful weighted Forman curvature for an edge.
+
+    Uses the standard weighted Forman expression with explicit edge-weight
+    square-root ratios:
+
+        F(e) = w_e * [ w_u (1 - Σ_{e_u~e} √(w_e/w_{e_u}))
+                     + w_v (1 - Σ_{e_v~e} √(w_e/w_{e_v})) ]
+
+    where w_e is the edge weight, w_u/w_v are vertex weights (default 1),
+    and the sums are over edges adjacent to e at endpoints u and v
+    respectively (excluding e itself).
+
+    This is the canonical weighted Forman curvature, distinct from the
+    ``weighted_af3_proxy`` heuristic. The square-root weight ratios
+    capture the relative importance of parallel vs perpendicular edges
+    in a way that simple degree substitution cannot.
+    """
+    if not g.has_edge(u, v):
+        raise ValueError(f"({u},{v}) is not an edge")
+    w_e = float(g[u][v].get("weight", 1.0))
+    if w_e <= 0:
+        raise ValueError("edge weight must be positive for weighted Forman")
+
+    # Vertex weights (default 1.0 if not specified)
+    w_u = float(g.nodes[u].get("weight", 1.0))
+    w_v = float(g.nodes[v].get("weight", 1.0))
+
+    # Edges adjacent to e at u (excluding e itself)
+    sum_u = 0.0
+    for z in g.neighbors(u):
+        if z == v:
+            continue
+        w_eu = float(g[u][z].get("weight", 1.0))
+        if w_eu > 0:
+            sum_u += math.sqrt(w_e / w_eu)
+
+    # Edges adjacent to e at v (excluding e itself)
+    sum_v = 0.0
+    for z in g.neighbors(v):
+        if z == u:
+            continue
+        w_ev = float(g[v][z].get("weight", 1.0))
+        if w_ev > 0:
+            sum_v += math.sqrt(w_e / w_ev)
+
+    return float(w_e * (w_u * (1.0 - sum_u) + w_v * (1.0 - sum_v)))
+
+
+def weighted_forman_curvatures(g: nx.Graph) -> dict[tuple[int, int], float]:
+    return {(int(u), int(v)): weighted_forman_edge(g, int(u), int(v)) for u, v in g.edges()}
