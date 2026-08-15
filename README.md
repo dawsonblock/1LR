@@ -1,11 +1,12 @@
 <div align="center">
 
-# LGAE-v3.2: 1LR (Laplacian Geometric Adaptive Evolution)
+# LGAE-v3.2 / 1LR: Governed Adaptive Geometry Engine
 
 **A Multi-Timescale Geometric Controller for Self-Evolving Graph and Fiber-Bundle Latent Spaces**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.6+](https://img.shields.io/badge/PyTorch-2.6+-ee4c2c.svg)](https://pytorch.org/)
+[![CI Status](https://github.com/dawsonblock/1LR/actions/workflows/ci.yml/badge.svg)](https://github.com/dawsonblock/1LR/actions)
 [![Tests](https://img.shields.io/badge/tests-72%2F72%20passing-brightgreen.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Gauge: SO(d)](https://img.shields.io/badge/gauge-SO(d)%20Invariance-purple.svg)]()
@@ -16,7 +17,7 @@
 
 ## Overview
 
-**LGAE-v3.2 (`1LR`)** is a hardened geometric deep learning framework and dynamical controller. It operates over graph-structured data and continuous fiber bundles, combining continuous field diffusion, Lie-algebra gauge connections, discrete Ricci-flow surgery, and rigorous multi-operator curvature audits.
+**LGAE-v3.2 (`1LR`)** is a hardened geometric deep learning engine and dynamical controller. It operates over graph-structured data and continuous fiber bundles, combining continuous field diffusion, Lie-algebra gauge connections, discrete Ricci-flow surgery, and multi-operator curvature diagnostics.
 
 ### Core Architecture Principle
 > **Field dynamics are sparse and compiled; discrete evolution is transactional and eager; curvature diagnoses rather than directly dictates topology.**
@@ -51,33 +52,33 @@
 
 ---
 
-## Key Features & Hardening (v3.2)
+## Key Features & Hardening
 
-- **$\mathrm{SO}(d)$ Gauge Connection Bank (`SOConnectionBank`)**:
-  - Parameters live in Lie algebra $\mathfrak{so}(d)$ via skew-symmetric mapping $A_e = \frac{1}{2}(R_e - R_e^T)$.
-  - Exact Cayley or Matrix Exponential ($\exp(A_e)$) retractions ensure every connection strictly satisfies $U_e^T U_e = I$ and $\det(U_e) = +1$ across arbitrary Adam/SGD steps.
-  - Reverse transport uses $U_e^T = U_e^{-1}$.
-  - Fixed-capacity buffer slot indexing prevents tensor reallocation during topology mutations.
+### 1. $\mathrm{SO}(d)$ Gauge Connection Bank (`SOConnectionBank`)
+* **Lie-Algebra Parameterization**: Generator parameters live in unconstrained space $R_e$, strictly mapped through the skew-symmetric algebra $\mathfrak{so}(d)$ via $A_e = \frac{1}{2}(R_e - R_e^T)$ and mapped to $\mathrm{SO}(d)$ via Cayley retraction or Matrix Exponential ($\exp(A_e)$).
+* **Guaranteed Invariance**: Connections strictly satisfy $U_e^T U_e = I$ and $\det(U_e) = +1$ to machine precision across arbitrary Euclidean optimizer steps.
+* **Slot Generation Lifecycle ($g_e$)**: Monotonic generation counters $(g_e \leftarrow g_e + 1)$ track slot allocation and retirement.
+* **Optimizer Momentum Isolation**: When an edge slot is retired or reused, its optimizer momentum slices (`exp_avg`, `exp_avg_sq`, `momentum_buffer`) are zeroed, eliminating historical gradient momentum leakage onto newly created connections.
 
-- **Stable Optimal Transport (Log-Sinkhorn Ollivier Curvature)**:
-  - Log-domain scaling eliminates underflow at low entropic regularization.
-  - Zero-mass support rows/columns are cleanly removed.
-  - Convergence certified against recovered coupling marginal residuals.
-  - Reference linear programming (`exact_lp`) retained as exact ground-truth oracle.
+### 2. Stable Optimal Transport (Log-Sinkhorn Ollivier Curvature)
+* **Log-Domain Scaling**: Eliminates probability-space underflow at small entropic regularization $\epsilon$.
+* **Zero-Mass Pruning**: Exact support removal for unvisited states.
+* **Marginal-Residual Certification**: Convergence validated against recovered coupling marginals rather than dual scaling differences alone.
+* **Exact Ground-Truth Oracle**: High-precision linear programming (`exact_lp`) retained for qualification checks.
 
-- **Reversible $\Gamma$-Calculus & Bakry–Émery ($CD(K, N)$)**:
-  - Reversible row-stochastic Markov generators $\Delta = P - I$ with detailed-balance volume measure reconstruction.
-  - Float64 row renormalization and diagonal ULP cancellation.
-  - Full Schur complement $B_{\text{eff}} = B_{pp} - B_{pn} B_{nn}^+ B_{np}$ eliminates $\Gamma$-null directions without false positives.
+### 3. Reversible $\Gamma$-Calculus & Bakry–Émery ($CD(K, N)$)
+* **Continuous-Time Reversible Markov Generators**: $\Delta = P - I$ formed with detailed-balance volume measure reconstruction.
+* **Float64 Conditioning**: Precision row re-normalization and diagonal ULP cancellation.
+* **$\Gamma$-Nullspace Schur Complement**: Eliminates uncoupled higher-hop coordinates ($B_{\text{eff}} = B_{pp} - B_{pn} B_{nn}^+ B_{np}$), preventing false-positive curvature anomalies.
 
-- **Log-Conformal Ricci Flow & Surgery Hysteresis**:
-  - Multiplicative exponential updates $w \leftarrow \text{clamp}(w \cdot \exp(-\Delta t(\kappa - \kappa^*)), w_{\min}, w_{\max})$ guarantee weight positivity.
-  - Per-edge cooldown tracker and distinct add/deadband/prune thresholds prevent edge flapping.
-  - $O(V+E)$ bridge filter immediately blocks disconnecting deletions.
+### 4. Log-Conformal Ricci Flow & Surgery Hysteresis
+* **Weight Positivity**: Multiplicative updates $w \leftarrow \text{clamp}(w \cdot \exp(-\Delta t(\kappa - \kappa^*)), w_{\min}, w_{\max})$ guarantee weights never cross zero.
+* **Anti-Thrashing Cooldown**: Canonical edge cooldown tracker separates addition, deadband, and pruning regions.
+* **$O(V+E)$ Bridge Filter**: Rejects disconnecting edge removals before triggering expensive global audits.
 
-- **`torch.compile` Compatibility & Buffer Management**:
-  - Bucketed fixed-capacity graph buffers (`GraphBuffers`) with in-place value refresh (`refresh_padded_markov_edges_`).
-  - Dormant fiber channels zeroed out to prevent hidden latent energy buildup.
+### 5. `torch.compile` Compatibility & Predictability
+* **Fixed-Shape Buffer Bucketing**: `GraphBuffers` round capacity to fixed-size buckets with in-place value refresh (`refresh_padded_markov_edges_`).
+* **Dormant Fiber Channel Suppression**: Inactive latent coordinates are zeroed post-diffusion to prevent hidden energy accumulation.
 
 ---
 
@@ -93,15 +94,15 @@
 git clone https://github.com/dawsonblock/1LR.git
 cd 1LR
 
-# Install in editable mode with dev dependencies
+# Install in editable mode with development dependencies
 python -m pip install -e '.[dev]' --no-build-isolation
 ```
 
 ---
 
-## Quickstart & Examples
+## Quickstart & Code Examples
 
-### 1. Basic Engine & Gauge Parallel Transport
+### 1. Gauge Parallel Transport on Fiber Bundles
 
 ```python
 import torch
@@ -118,7 +119,7 @@ cfg.fiber.gauge_parameterization = "cayley"  # 'cayley' or 'exp'
 edges = [(0, 1), (1, 2), (2, 3), (3, 0)]
 graph = make_bucketed_graph_buffers(num_nodes=4, edges=edges, bucket_size=256)
 
-# Create engine and perform gauge-covariant diffusion
+# Create engine and execute gauge-covariant diffusion
 engine = LGAEEngine(graph, cfg)
 z_next = engine.diffuse_(eta=0.01)
 
@@ -128,7 +129,7 @@ print(f"Max orthogonality error: {orth_err.max():.2e}")
 print(f"Max determinant error:   {det_err.max():.2e}")
 ```
 
-### 2. Differentiable Training Core
+### 2. Differentiable Training Core with Optimizer Isolation
 
 ```python
 import torch
@@ -154,17 +155,17 @@ src, dst, w, valid, slot, reverse = padded_markov_edges_with_slots(graph, max_ed
 target = torch.randn(4, 2)
 pressure = torch.zeros(4)
 
-# Execute one step
+# Execute one step (automatically registers optimizer for slot lifecycle management)
 metrics = train_step(
     core, engine, optimizer,
     target=target, src=src, dst=dst, weight=w, valid=valid,
     bottleneck_pressure=pressure, edge_slot=slot, reverse=reverse,
     step=0, spawn_interval=50
 )
-print("Loss:", metrics["loss"].item())
+print("Step Loss:", metrics["loss"].item())
 ```
 
-### 3. Curvature Auditing & Mutation Governance
+### 3. Curvature Auditing & Governed Surgery
 
 ```python
 from lgae_v3.mutations import AddEdge, PruneEdge, ReweightEdge
@@ -217,6 +218,9 @@ lgae-v3 qualify-lly --graph cycle --nodes 6
 
 ```
 .
+├── .github/
+│   └── workflows/
+│       └── ci.yml            # Multi-version (Py 3.11 & 3.12) GitHub Actions CI
 ├── configs/
 │   └── default.yaml          # Default engine and audit configurations
 ├── docs/
@@ -244,7 +248,7 @@ lgae-v3 qualify-lly --graph cycle --nodes 6
 │   ├── operators.py          # Actuation & diagnostic Markov operators
 │   ├── receipts.py           # Cryptographic receipt logging
 │   └── topology.py           # NetworkX conversion, Betti numbers & PH
-└── tests/                    # 69 test modules covering 100% of functional paths
+└── tests/                    # 16 test modules with 72 verified unit/regression tests
 ```
 
 ---
