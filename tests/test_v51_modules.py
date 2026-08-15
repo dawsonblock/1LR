@@ -179,13 +179,21 @@ class TestTimescales:
             min_fast_before_medium=0,
             min_medium_before_slow=0,
         )
+        # can_adapt_* are read-only checks (do not advance state)
         assert ctrl.can_adapt_gauge(0)
         assert ctrl.can_adapt_affinity(0)
         assert ctrl.can_adapt_length(0)
-        # Step 1: only fast
-        ctrl.update(0)
+        # Step 1: only fast is active
         assert ctrl.can_adapt_gauge(1)
-        # Note: can_adapt_* calls update, which advances state
+        assert not ctrl.can_adapt_affinity(1)
+        assert not ctrl.can_adapt_length(1)
+        # Step 10: fast + medium
+        assert ctrl.can_adapt_gauge(10)
+        assert ctrl.can_adapt_affinity(10)
+        # Step 100: all active
+        assert ctrl.can_adapt_gauge(100)
+        assert ctrl.can_adapt_affinity(100)
+        assert ctrl.can_adapt_length(100)
 
 
 # ===========================================================================
@@ -353,9 +361,13 @@ class TestCausalEdges:
         z = torch.randn(3, 4)
         new_val = torch.ones(4)
         z_new = reg.intervene(0, new_val, z)
+        # Node 0 is set to the new value
         assert torch.allclose(z_new[0], new_val)
-        # Other nodes unchanged (simple propagation)
-        assert torch.allclose(z_new[1], z[1])
+        # Node 1 (causal child) is influenced by the intervention
+        # It should have shifted toward node 0's new value
+        assert not torch.allclose(z_new[1], z[1])
+        # Node 2 (no causal connection) is unchanged
+        assert torch.allclose(z_new[2], z[2])
 
     def test_serialize_deserialize(self):
         reg = CausalEdgeRegistry()

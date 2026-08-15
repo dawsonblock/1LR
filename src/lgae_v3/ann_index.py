@@ -146,8 +146,6 @@ class HNSWIndexNumpy:
                 candidates = np.concatenate(valid_partitions)
             else:
                 candidates = np.arange(len(self._data))
-            if len(candidates) == 0:
-                candidates = np.arange(len(self._data))
 
             # Exact distance computation within candidates
             diff = self._data[candidates] - q

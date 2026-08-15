@@ -116,6 +116,7 @@ class MutationCreditTracker:
             "step": step,
             "predicted_delta_u": predicted_delta_u,
             "utility_samples": [],
+            "baseline_utility": None,  # Set on first record_utility call
         }
         self._next_id += 1
         return receipt
@@ -128,6 +129,11 @@ class MutationCreditTracker:
         for rid, pending in list(self._pending.items()):
             mut_step = pending["step"]
             age = step - mut_step
+
+            # Record baseline utility at age 0 (the step of the mutation)
+            if age == 0 and pending["baseline_utility"] is None:
+                pending["baseline_utility"] = utility
+
             if age in self.horizons:
                 pending["utility_samples"].append((age, utility))
 
@@ -148,11 +154,12 @@ class MutationCreditTracker:
             utility_at[age] = util
 
         # Compute discounted return
-        # R = Σ γ^τ ΔU_τ where ΔU_τ = U_{t+τ} - U_{t-1}
-        # We approximate using the utility samples
+        # R = Σ γ^τ ΔU_τ where ΔU_τ = U_{t+τ} - U_baseline
+        baseline = pending.get("baseline_utility", 0.0) or 0.0
         discounted_return = 0.0
         for age, util in pending["utility_samples"]:
-            discounted_return += (self.gamma ** age) * util
+            delta_u = util - baseline
+            discounted_return += (self.gamma ** age) * delta_u
 
         # Prediction error
         prediction_error = abs(discounted_return - pending["predicted_delta_u"])

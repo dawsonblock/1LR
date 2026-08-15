@@ -130,7 +130,10 @@ class ConformalCalibrator:
         Returns:
             The conformal quantile (half-width of the prediction interval)
         """
-        assert len(predicted) == len(actual)
+        if len(predicted) != len(actual):
+            raise ValueError(
+                f"predicted and actual must have same length: {len(predicted)} vs {len(actual)}"
+            )
         residuals = [abs(p - a) for p, a in zip(predicted, actual)]
         self._residuals = residuals
         if len(residuals) == 0:

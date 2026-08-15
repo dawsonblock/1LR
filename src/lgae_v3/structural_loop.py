@@ -171,6 +171,25 @@ class StructuralLearningLoop:
             # Record mutation in history
             self.executive.record_mutation(chosen_action)
 
+            # Record graph hash before execution
+            hash_before = graph.state_hash()
+
+            # If SPAWN_FIBER, register in consolidation
+            if chosen_action == StructuralAction.SPAWN_FIBER:
+                new_dim = max(1, self.config.fiber.d_max - z.shape[1])
+                self.consolidation.register_fiber(
+                    dimension=new_dim,
+                    step=step,
+                )
+
+            # Measure after execution (if utility_fn provided)
+            if utility_fn is not None:
+                u_after = utility_fn(graph, z)
+            delta_u = u_after - u_before
+
+            # Record graph hash after execution
+            hash_after = graph.state_hash()
+
             # Record in credit tracker
             self.credit_tracker.record_mutation(
                 action=chosen_action,
@@ -180,26 +199,18 @@ class StructuralLearningLoop:
                 predicted_uncertainty=unc_estimate.std,
                 governance_decision=governance_decision,
                 governance_reasons=[],
-                graph_hash_before=graph.state_hash(),
-                graph_hash_after=graph.state_hash(),  # Updated after execution
+                graph_hash_before=hash_before,
+                graph_hash_after=hash_after,
                 config_governance_hash=config_governance_hash(self.config),
             )
-
-            # If SPAWN_FIBER, register in consolidation
-            if chosen_action == StructuralAction.SPAWN_FIBER:
-                self.consolidation.register_fiber(
-                    dimension=self.config.fiber.d_max - z.shape[1],
-                    step=step,
-                )
-
-            # Measure after (would need actual execution)
-            u_after = u_before  # Placeholder
-            delta_u = u_after - u_before
 
         # 6. TRAIN: Record outcome for executive learning
         if executed:
             self.executive.record_outcome(observation, chosen_action, delta_u)
-            self.credit_tracker.record_utility(step, u_after)
+            # Record utility at the mutation step (baseline)
+            self.credit_tracker.record_utility(step, u_before)
+            # Record utility after execution
+            self.credit_tracker.record_utility(step + 1, u_after)
 
         # Update consolidation lifecycle
         self.consolidation.update_lifecycle(step)

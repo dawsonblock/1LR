@@ -418,7 +418,7 @@ def test_pyproject_version_matches():
 
 
 def test_pyproject_version_matches_412():
-    """pyproject.toml version should be 4.1.2."""
+    """pyproject.toml version should match VERSION constant."""
     import pathlib
     pyproject = pathlib.Path(__file__).parent.parent / "pyproject.toml"
     content = pyproject.read_text()

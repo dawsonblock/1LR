@@ -161,10 +161,13 @@ class CausalEdgeRegistry:
         z_new = z.clone()
         z_new[node] = value
 
-        # Propagate through causal children (BFS)
+        # Propagate through causal children (BFS) using a linear influence
+        # model: each child shifts toward the parent's new value by a
+        # damping factor that decreases with depth.
         queue: deque[tuple[int, int]] = deque([(node, 0)])
         visited = {node}
-        max_depth = z.shape[0]  # Worst case: propagate through all nodes
+        max_depth = z.shape[0]
+        damping = 0.5  # Influence strength per hop
 
         while queue:
             current, depth = queue.popleft()
@@ -175,10 +178,10 @@ class CausalEdgeRegistry:
                 if child in visited:
                     continue
                 visited.add(child)
-                # In a real system, the propagation would use the actual
-                # causal mechanism. Here we use a simple linear propagation.
-                # The child's value is influenced by the parent's new value.
-                # This is a placeholder for the actual mechanism.
+                # Linear influence: child moves toward parent's new value
+                # by a depth-discounted factor.
+                influence = damping ** (depth + 1)
+                z_new[child] = z_new[child] + influence * (z_new[current] - z_new[child])
                 queue.append((child, depth + 1))
 
         return z_new

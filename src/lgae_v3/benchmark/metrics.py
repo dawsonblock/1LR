@@ -158,8 +158,11 @@ def run_benchmark(
         regret = evaluate_mutation_regret(task, proposed, seed=seed)
         regret_results.append(regret)
 
-    diagnosis_accuracy = sum(1 for d in diagnosis_results if d.is_correct) / len(diagnosis_results)
-    mean_regret = float(np.mean([r.regret for r in regret_results]))
+    diagnosis_accuracy = (
+        sum(1 for d in diagnosis_results if d.is_correct) / len(diagnosis_results)
+        if diagnosis_results else 0.0
+    )
+    mean_regret = float(np.mean([r.regret for r in regret_results])) if regret_results else 0.0
 
     return BenchmarkResult(
         diagnosis_results=diagnosis_results,

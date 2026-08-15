@@ -346,7 +346,6 @@ class StructuralExecutive:
         self._experience.append({
             "observation": observation.to_vector().detach().clone(),
             "action_idx": ACTION_TO_IDX[action],
-            "predicted_delta_u": None,  # Filled during training
             "actual_delta_u": actual_delta_utility,
         })
 

@@ -138,28 +138,50 @@ class MultiTimescaleController:
         return active
 
     def can_adapt_gauge(self, step: int) -> bool:
-        """Check if gauge connections can adapt at this step."""
-        return Timescale.FAST in self.update(step)
+        """Check if gauge connections can adapt at this step.
+
+        This is a read-only check; it does not advance the controller state.
+        """
+        if not self.schedule.is_active(Timescale.FAST, step):
+            return False
+        return True
 
     def can_adapt_affinity(self, step: int) -> bool:
-        """Check if affinities can adapt at this step."""
-        active = self.update(step)
-        return Timescale.MEDIUM in active
+        """Check if affinities can adapt at this step.
+
+        This is a read-only check; it does not advance the controller state.
+        """
+        if not self.schedule.is_active(Timescale.MEDIUM, step):
+            return False
+        # Check minimum convergence constraint
+        if self.state.fast_updates < self.min_fast_before_medium:
+            return False
+        return True
 
     def can_adapt_length(self, step: int) -> bool:
-        """Check if edge lengths can adapt at this step."""
-        active = self.update(step)
-        return Timescale.SLOW in active
+        """Check if edge lengths can adapt at this step.
+
+        This is a read-only check; it does not advance the controller state.
+        """
+        if not self.schedule.is_active(Timescale.SLOW, step):
+            return False
+        if self.state.medium_updates < self.min_medium_before_slow:
+            return False
+        return True
 
     def can_adapt_topology(self, step: int) -> bool:
-        """Check if topology (add/prune edges) can change at this step."""
-        active = self.update(step)
-        return Timescale.SLOW in active
+        """Check if topology (add/prune edges) can change at this step.
+
+        This is a read-only check; it does not advance the controller state.
+        """
+        return self.can_adapt_length(step)
 
     def can_spawn_fiber(self, step: int) -> bool:
-        """Check if fibers can be spawned/pruned at this step."""
-        active = self.update(step)
-        return Timescale.MEDIUM in active
+        """Check if fibers can be spawned/pruned at this step.
+
+        This is a read-only check; it does not advance the controller state.
+        """
+        return self.can_adapt_affinity(step)
 
     def summary(self) -> dict[str, Any]:
         """Return a summary of the adaptation state."""

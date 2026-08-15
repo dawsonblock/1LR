@@ -197,7 +197,7 @@ class StabilityPlasticityController:
         Requires: ΔU/ΔB > τ_efficiency
         """
         if delta_budget <= 0:
-            return True  # No growth, always allow
+            return True  # No growth or shrinkage, always allow
         efficiency = delta_utility / delta_budget
         return efficiency > self.tau_efficiency
 

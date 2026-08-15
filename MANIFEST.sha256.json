@@ -14,8 +14,8 @@
     },
     {
       "path": "BUILD_REPORT.md",
-      "bytes": 9180,
-      "sha256": "2aebbf32bba4b249ec2a813cdf6089ab04560b89890c67411016f6b5b21964fe"
+      "bytes": 10557,
+      "sha256": "30f92eea5d6215dd41caa869f9fc20ae397e8b90ae09a95306f8ee7a4cb808fc"
     },
     {
       "path": "LICENSE",
@@ -119,8 +119,8 @@
     },
     {
       "path": "src/lgae_v3/ann_index.py",
-      "bytes": 11871,
-      "sha256": "4119c908f837df18cea896d802b6e49889b00e31e510465d1a1d3bb30e92891d"
+      "bytes": 11778,
+      "sha256": "2cbad2dd50f8a922ef1853f7a7dfafc7cd4e795c05a0673a9569b22a6c597604"
     },
     {
       "path": "src/lgae_v3/benchmark/__init__.py",
@@ -134,18 +134,18 @@
     },
     {
       "path": "src/lgae_v3/benchmark/metrics.py",
-      "bytes": 5430,
-      "sha256": "85fda380da81baaf7c8ba6bcad92c96773b73de5192085c803e514b4f4ffcef4"
+      "bytes": 5511,
+      "sha256": "d1076e62ac1f350599640fc6c09cdb3b6fc8caa9e2911d72722581c80e083a2b"
     },
     {
       "path": "src/lgae_v3/benchmark/tasks.py",
-      "bytes": 23001,
-      "sha256": "4b0f9d9502ed0d83470ecddc03794a91a87bffdc00c75be01fa713bceeeb344a"
+      "bytes": 23086,
+      "sha256": "875e0d201e91020616c24c7741aa34ce3db496500489032f1facc0bd4169c305"
     },
     {
       "path": "src/lgae_v3/causal_edges.py",
-      "bytes": 9707,
-      "sha256": "939dc5a092eeb7979c518cb03f42cc4b496555310713b00f4ba043da92665713"
+      "bytes": 9833,
+      "sha256": "e2599f240c2d58dd81f1b1e1714a2c13559d792f2f155946153553c8036bb6cc"
     },
     {
       "path": "src/lgae_v3/cli.py",
@@ -169,8 +169,8 @@
     },
     {
       "path": "src/lgae_v3/consolidation.py",
-      "bytes": 9344,
-      "sha256": "f3a0ce99e9d6111b6d2b5b24a994cbf47be0c692d4f4ee09581090db63c9f5a5"
+      "bytes": 9357,
+      "sha256": "1fbe65e6114c9363cad9b4b2eab3930d7901e8338a436a8c1a74d413eaaa7de2"
     },
     {
       "path": "src/lgae_v3/core/__init__.py",
@@ -199,8 +199,8 @@
     },
     {
       "path": "src/lgae_v3/credit.py",
-      "bytes": 11751,
-      "sha256": "2c8f815d1688a68978ed2ddf9f3b6fb47077558d0a1a8b5088d767d6d886552a"
+      "bytes": 12076,
+      "sha256": "3334bb8b6f72f700fef845db0b99b5015191eca66a8204251ee57f9ae469ea0b"
     },
     {
       "path": "src/lgae_v3/curvature/__init__.py",
@@ -249,8 +249,8 @@
     },
     {
       "path": "src/lgae_v3/executive.py",
-      "bytes": 14440,
-      "sha256": "769de303c5078397fa1e53c626f8eb9955227afa2d56c0c1cc16805f0b020ea8"
+      "bytes": 14375,
+      "sha256": "819b87b73d030745e46e4a320819ace5c537e5eec97a9ba60a23fd10e06ad3ff"
     },
     {
       "path": "src/lgae_v3/fibers.py",
@@ -304,13 +304,13 @@
     },
     {
       "path": "src/lgae_v3/structural_loop.py",
-      "bytes": 9403,
-      "sha256": "751136f8e8d5d3ed8cb6e6a857b44575c10aaaebac35fa699d031ac44f964876"
+      "bytes": 9809,
+      "sha256": "eb295e4c31ef963ef4f5639c3c1e430eb0eef1a9c241d54d86b3ecc6e4b9d699"
     },
     {
       "path": "src/lgae_v3/timescales.py",
-      "bytes": 6439,
-      "sha256": "16913ed111faab431b65d74d4e6c9f03d10c4108069a9fec7f6cb56ba0425f5a"
+      "bytes": 7161,
+      "sha256": "9ea65ba7f90484a0012903382e30ff16277fa290788c6f287e8edf1d41d39d6d"
     },
     {
       "path": "src/lgae_v3/topology.py",
@@ -349,8 +349,8 @@
     },
     {
       "path": "src/lgae_v3/uncertainty.py",
-      "bytes": 6488,
-      "sha256": "62d38bc7b69ba093b4a2c772b34128d73b267810bddada8e38e260b51e7e8f58"
+      "bytes": 6626,
+      "sha256": "20ff5ba8f04e9a7e1fa952f3db5d47db3ef7eb3748b640d78e67db9bf94fe819"
     },
     {
       "path": "src/lgae_v3/version.py",
@@ -454,8 +454,8 @@
     },
     {
       "path": "tests/test_v411_integrity.py",
-      "bytes": 17672,
-      "sha256": "8601734bc5335f6e6bd47ec30714ddab48a492cc9c6f31a07095b5b02ef35de2"
+      "bytes": 17686,
+      "sha256": "b384c82c86da7d5d177ade175d44135305a23956491fc26e804ad0c8a415bd1d"
     },
     {
       "path": "tests/test_v412_adversarial.py",
@@ -489,8 +489,8 @@
     },
     {
       "path": "tests/test_v51_modules.py",
-      "bytes": 18621,
-      "sha256": "289087d46f160d662d7725d4fed64ed0763079567f9fbbf5fcac79c814c43b32"
+      "bytes": 19191,
+      "sha256": "85c2092b4bbda2d9377318b314b28c55b03c57bf1bf7e4b91f244799c26f0142"
     }
   ]
 }

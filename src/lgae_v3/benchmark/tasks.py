@@ -542,8 +542,9 @@ class TaskF_NoOp(BenchmarkTask):
         # Compare current graph to the initial (optimal) configuration
         initial_w = state.task_params.get("initial_weights")
         initial_edges = state.task_params.get("optimal_edge_count", 7)
+        # initial_w is always set by initial_state(); if somehow missing,
+        # treat the current state as optimal (utility = 0).
         if initial_w is None:
-            # First call: record initial weights
             return 0.0
         # Penalize weight changes
         current_w = state.graph.weight[state.graph.valid.bool()]

@@ -1,6 +1,6 @@
 # LGAE-v5.1.0 Deep Audit: Sparse Scaling, Float64 Discrepancy, ANN Index Build Report
 
-Build: `5.0.0`
+Build: `5.1.0`
 
 Base: `lgae_v3_merged_hardened` v3.1.0.
 
@@ -92,13 +92,32 @@ Base: `lgae_v3_merged_hardened` v3.1.0.
 - Full test suite: **492/492 passed**.
 - `scripts/qualify.py`: **PASS**.
 - Editable install with `--no-build-isolation`: **PASS**.
-- Installed CLI version/import check: **PASS** (`5.0.0`).
+- Installed CLI version/import check: **PASS** (`5.1.0`).
 - CPU Inductor fixed-shape compile smoke (`N=32,D=4,E=64`): **PASS**.
 - End-to-end CLI demo: **PASS**; candidate mutation reaches a governed `quarantine` decision rather than numerical failure.
 - Manifest verification: **PASS** (`scripts/generate_manifest.py --check`).
 - N=2500 sparse governor audit: **PASS** (3.2s, no global dense allocation).
 
+### v5.1.0 additions
+
+- **Dynamic gauge connections** (`dynamic_gauge.py`): Context-conditioned SO(d) transport `U_ij = exp(skew(f_θ(z_i, z_j, c_t)))`
+- **Multi-timescale adaptation** (`timescales.py`): Fast/medium/slow timescale separation prevents mutual drift
+- **Sheaf-adjacency diffusion** (`sheaf_diffusion.py`): Sheaf-adjacency + normalization + gating vs pure Laplacian
+- **ANN-backed neighbor index** (`ann_index.py`): FAISS or numpy HNSW fallback with exact reranking pipeline
+- **Causal edge semantics** (`causal_edges.py`): Association vs causal edges, do-interventions, counterfactuals
+- **Hypergraph** (`hypergraph.py`): Higher-order relationships via hyperedges, clique/star expansion
+
 ### v5.0.0 additions
+
+- **Learned structural executive** (`executive.py`): Proposal model with bilevel objective
+- **Long-term credit assignment** (`credit.py`): Discounted returns at horizons {16, 100, 1000}
+- **Calibrated uncertainty** (`uncertainty.py`): Ensemble epistemic UQ + LCB acceptance gate
+- **Stability/plasticity** (`consolidation.py`): Capacity budget, fiber lifecycle, probation gate
+- **Benchmark harness** (`benchmark/`): 6 synthetic tasks with known-optimal mutations
+- **Counterfactual engine** (`counterfactual.py`): Candidate comparison with NO_OP baseline
+- **Closed loop** (`structural_loop.py`): observe→predict→counterfactual→certify→train
+
+### v4.1.3 additions
 
 - **Analytic vertex selection**: union of transport pressure, LLY, discrepancy, touched nodes
 - **Local neighborhood cap**: max_local_nodes=256, radius=1 → N=2500 audit 73s→3.2s
