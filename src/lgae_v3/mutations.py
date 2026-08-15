@@ -116,6 +116,129 @@ class ReweightEdge:
 
 
 @dataclass(slots=True)
+class ReweightAffinity:
+    """Reweight only the affinity/conductance field, leaving metric length unchanged.
+
+    This is the v4.1.1 split: affinity and length are independent fields.
+    Use this mutation when the diffusion measure should change without
+    altering the shortest-path metric.
+    """
+    u: int
+    v: int
+    factor: float = 1.1
+    min_weight: float = 1e-3
+    max_weight: float = 10.0
+    name: str = "reweight_affinity"
+
+    def apply(self, graph: GraphBuffers) -> dict:
+        _validate_endpoint(graph, self.u, self.v)
+        factor = float(self.factor)
+        if not math.isfinite(factor) or factor <= 0:
+            raise ValueError("reweight factor must be finite and positive")
+        if not (math.isfinite(self.min_weight) and math.isfinite(self.max_weight) and 0 < self.min_weight <= self.max_weight):
+            raise ValueError("invalid weight clamp")
+        ids = _find_edge(graph, self.u, self.v)
+        if not ids.numel():
+            raise ValueError("edge not found")
+        i = int(ids[0].item())
+        graph.weight[i] = torch.clamp(graph.weight[i] * factor, self.min_weight, self.max_weight)
+        # Length is NOT modified — affinity and length are independent
+        graph.bump_version()
+        graph.validate()
+        return {"slot": i, "new_weight": float(graph.weight[i].item()), "field": "affinity", "affected_edges": [canonical_edge(self.u, self.v)]}
+
+
+@dataclass(slots=True)
+class ReweightLength:
+    """Reweight only the metric length field, leaving affinity unchanged.
+
+    Use this mutation when the shortest-path metric should change without
+    altering the diffusion measure.
+    """
+    u: int
+    v: int
+    factor: float = 1.1
+    min_length: float = 1e-3
+    max_length: float = 1e6
+    name: str = "reweight_length"
+
+    def apply(self, graph: GraphBuffers) -> dict:
+        _validate_endpoint(graph, self.u, self.v)
+        factor = float(self.factor)
+        if not math.isfinite(factor) or factor <= 0:
+            raise ValueError("reweight factor must be finite and positive")
+        if not (math.isfinite(self.min_length) and math.isfinite(self.max_length) and 0 < self.min_length <= self.max_length):
+            raise ValueError("invalid length clamp")
+        ids = _find_edge(graph, self.u, self.v)
+        if not ids.numel():
+            raise ValueError("edge not found")
+        i = int(ids[0].item())
+        if graph.length is None:
+            raise ValueError("graph has no length field; cannot reweight length")
+        graph.length[i] = torch.clamp(graph.length[i] * factor, self.min_length, self.max_length)
+        # Affinity is NOT modified
+        graph.bump_version()
+        graph.validate()
+        return {"slot": i, "new_length": float(graph.length[i].item()), "field": "length", "affected_edges": [canonical_edge(self.u, self.v)]}
+
+
+@dataclass(slots=True)
+class CoupledReweight:
+    """Reweight both affinity and length with an explicit coupling policy.
+
+    The coupling factor controls how length responds to affinity changes:
+    - coupling="inverse": stronger affinity → shorter length (legacy behavior)
+    - coupling="direct": stronger affinity → longer length
+    - coupling="none": length unchanged (equivalent to ReweightAffinity)
+    """
+    u: int
+    v: int
+    affinity_factor: float = 1.1
+    length_factor: float | None = None  # if None, derived from coupling
+    coupling: str = "inverse"
+    min_weight: float = 1e-3
+    max_weight: float = 10.0
+    min_length: float = 1e-3
+    max_length: float = 1e6
+    name: str = "coupled_reweight"
+
+    def apply(self, graph: GraphBuffers) -> dict:
+        _validate_endpoint(graph, self.u, self.v)
+        af = float(self.affinity_factor)
+        if not math.isfinite(af) or af <= 0:
+            raise ValueError("affinity_factor must be finite and positive")
+        if self.coupling not in ("inverse", "direct", "none"):
+            raise ValueError("coupling must be 'inverse', 'direct', or 'none'")
+        ids = _find_edge(graph, self.u, self.v)
+        if not ids.numel():
+            raise ValueError("edge not found")
+        i = int(ids[0].item())
+        graph.weight[i] = torch.clamp(graph.weight[i] * af, self.min_weight, self.max_weight)
+        new_length = None
+        if graph.length is not None:
+            if self.length_factor is not None:
+                lf = float(self.length_factor)
+            elif self.coupling == "inverse":
+                lf = 1.0 / af
+            elif self.coupling == "direct":
+                lf = af
+            else:
+                lf = 1.0
+            if math.isfinite(lf) and lf > 0:
+                graph.length[i] = torch.clamp(graph.length[i] * lf, self.min_length, self.max_length)
+                new_length = float(graph.length[i].item())
+        graph.bump_version()
+        graph.validate()
+        return {
+            "slot": i,
+            "new_weight": float(graph.weight[i].item()),
+            "new_length": new_length,
+            "coupling": self.coupling,
+            "affected_edges": [canonical_edge(self.u, self.v)],
+        }
+
+
+@dataclass(slots=True)
 class PruneEdge:
     u: int
     v: int
@@ -278,7 +401,7 @@ def mutation_to_spec(mutation: Any) -> dict[str, Any]:
             "coupled": bool(mutation.coupled),
             "name": mutation.name,
         }
-    if not isinstance(mutation, (AddEdge, ReweightEdge, PruneEdge)):
+    if not isinstance(mutation, (AddEdge, ReweightEdge, ReweightAffinity, ReweightLength, CoupledReweight, PruneEdge)):
         raise TypeError(f"unsupported mutation type: {type(mutation).__name__}")
     payload = asdict(mutation)
     payload["type"] = type(mutation).__name__
@@ -294,6 +417,12 @@ def mutation_from_spec(payload: dict[str, Any]):
         return AddEdge(**data)
     if kind == "ReweightEdge":
         return ReweightEdge(**data)
+    if kind == "ReweightAffinity":
+        return ReweightAffinity(**data)
+    if kind == "ReweightLength":
+        return ReweightLength(**data)
+    if kind == "CoupledReweight":
+        return CoupledReweight(**data)
     if kind == "PruneEdge":
         return PruneEdge(**data)
     if kind == "RicciFlowReweight":

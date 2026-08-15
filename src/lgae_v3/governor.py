@@ -44,6 +44,7 @@ from .topology import (
     topology_drift,
     persistent_homology_signature,
     persistent_homology_drift,
+    persistent_homology_bottleneck_drift,
 )
 from .types import AuditSnapshot, GraphBuffers, MutationDecision, MutationResult
 
@@ -106,7 +107,9 @@ class GeometryGovernor:
         )
         m = edge_diffusion_metrics(z, src, dst, pw, graph.num_nodes)
         g = graphbuffers_to_networkx(graph)
-        if self.cfg.audit.curvature_weight_mode == "weighted":
+        # v4.1.1: candidate tier uses candidate_geometry_mode if set
+        candidate_mode = self.cfg.audit.candidate_geometry_mode or self.cfg.audit.curvature_weight_mode
+        if candidate_mode in ("weighted", "metric_measure"):
             af = {(int(u), int(v)): weighted_forman_edge(g, int(u), int(v)) for u, v in g.edges()}
         else:
             af = {(int(u), int(v)): af3_edge(g, int(u), int(v)) for u, v in g.edges()}
@@ -176,6 +179,9 @@ class GeometryGovernor:
             "bakry_nodes": 0,
             "cde_kind": "sampled_violation",
             "curvature_weight_mode": self.cfg.audit.curvature_weight_mode,
+            "candidate_geometry_mode": self.cfg.audit.candidate_geometry_mode or self.cfg.audit.curvature_weight_mode,
+            "audit_geometry_mode": self.cfg.audit.audit_geometry_mode or self.cfg.audit.curvature_weight_mode,
+            "certificate_geometry_mode": self.cfg.audit.certificate_geometry_mode or self.cfg.audit.curvature_weight_mode,
             "diagnostic_support_mode": (
                 "full_soft_kernel" if graph.num_nodes <= self.cfg.operator.diagnostic_full_kernel_max_nodes else "topk_support_approximation"
             ),
@@ -209,7 +215,9 @@ class GeometryGovernor:
         lly: dict[tuple[int, int], float] = {}
         cross_err = 0.0
         role_deficit = 0.0
-        use_weighted = self.cfg.audit.curvature_weight_mode == "weighted"
+        # v4.1.1: audit tier uses audit_geometry_mode if set
+        audit_mode = self.cfg.audit.audit_geometry_mode or self.cfg.audit.curvature_weight_mode
+        use_weighted = audit_mode in ("weighted", "metric_measure")
         for u, v in target_edges:
             if use_weighted:
                 a = weighted_lly_laplacian_lp(g, int(u), int(v))
@@ -396,6 +404,14 @@ class GeometryGovernor:
         ph_drift = persistent_homology_drift(
             before.details.get("persistent_homology"), after.details.get("persistent_homology")
         )
+        # v4.1.2: optional bottleneck distance drift (stricter than summary drift)
+        ph_bottleneck_drift = None
+        if a.use_bottleneck_ph_drift:
+            # Need the latent tensors for bottleneck; stored in audit metadata
+            z_before = before.details.get("latent_snapshot")
+            z_after = after.details.get("latent_snapshot")
+            if z_before is not None and z_after is not None:
+                ph_bottleneck_drift = persistent_homology_bottleneck_drift(z_before, z_after)
         if a.require_persistent_homology and ph_drift is None:
             reasons.append("persistent_homology_unavailable")
             uncertain = True
@@ -405,6 +421,13 @@ class GeometryGovernor:
                 uncertain = True
             elif ph_drift > float(a.max_ph_drift):
                 reasons.append("persistent_homology_drift_above_max")
+                hard_fail = True
+        if a.use_bottleneck_ph_drift and a.max_ph_bottleneck_drift is not None:
+            if ph_bottleneck_drift is None:
+                reasons.append("persistent_homology_bottleneck_unavailable")
+                uncertain = True
+            elif ph_bottleneck_drift > float(a.max_ph_bottleneck_drift):
+                reasons.append("persistent_homology_bottleneck_drift_above_max")
                 hard_fail = True
 
         if hard_fail:
@@ -420,6 +443,7 @@ class GeometryGovernor:
             "topology_drift": drift,
             "beta0_increase": beta0_inc,
             "persistent_homology_drift": ph_drift,
+            "persistent_homology_bottleneck_drift": ph_bottleneck_drift,
             **(metadata or {}),
         }
         return MutationResult(decision, reasons, before=before, after=after, metadata=meta)
@@ -595,4 +619,53 @@ class GeometryGovernor:
             "shadow_latent_delta_norm": float(torch.linalg.vector_norm(z_shadow - z_before).item()),
             **(metadata or {}),
         }
+
+        # v4.1.1: multi-horizon certification for fiber mutations
+        horizons = self.cfg.mutation.shadow_horizons
+        if horizons:
+            horizon_results: list[dict] = []
+            horizon_decisions: list[tuple[int, MutationDecision, list[str]]] = []
+            severity = {MutationDecision.ACCEPT: 0, MutationDecision.QUARANTINE: 1, MutationDecision.REJECT: 2}
+            for h in horizons:
+                if h == self.cfg.mutation.shadow_steps:
+                    default_result = self._decide_transition(
+                        before, after, transition_name=name, metadata={"horizon": int(h)},
+                    )
+                    horizon_results.append({
+                        "horizon": int(h),
+                        "decision": default_result.decision.value,
+                    })
+                    horizon_decisions.append((int(h), default_result.decision, default_result.reasons))
+                    continue
+                try:
+                    z_h = self.shadow_rollout(graph, z_after, gauge_bank=gauge_bank, steps=int(h))
+                    after_h = self.audit(graph, z_h, seed=seed)
+                    h_result = self._decide_transition(
+                        before, after_h, transition_name=name, metadata={"horizon": int(h)},
+                    )
+                    horizon_results.append({
+                        "horizon": int(h),
+                        "decision": h_result.decision.value,
+                    })
+                    horizon_decisions.append((int(h), h_result.decision, h_result.reasons))
+                except Exception as exc:
+                    return MutationResult(
+                        MutationDecision.REJECT,
+                        [f"multi_horizon_fiber_shadow_failed_at_H={h}:{exc}"],
+                        before=before,
+                        metadata={**meta, "multi_horizon": horizon_results},
+                    )
+            worst_h, worst_decision, worst_reasons = max(horizon_decisions, key=lambda x: severity[x[1]])
+            meta["multi_horizon"] = horizon_results
+            meta["multi_horizon_worst"] = worst_h
+            if worst_decision != MutationDecision.ACCEPT:
+                return MutationResult(
+                    worst_decision,
+                    [f"multi_horizon_{worst_decision.value}_at_H={worst_h}"] + worst_reasons,
+                    before=before,
+                    after=after,
+                    metadata=meta,
+                )
+            return MutationResult(MutationDecision.ACCEPT, [], before=before, after=after, metadata=meta)
+
         return self._decide_transition(before, after, transition_name=name, metadata=meta)

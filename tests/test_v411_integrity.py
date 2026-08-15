@@ -400,7 +400,7 @@ def test_weighted_forman_uniform_reduction():
 
 def test_version_constant_exists():
     """version.py should export a VERSION constant."""
-    assert VERSION == "4.1.1"
+    assert VERSION == "4.1.2"
 
 
 def test_cli_version_matches_package():
@@ -415,6 +415,14 @@ def test_pyproject_version_matches():
     pyproject = pathlib.Path(__file__).parent.parent / "pyproject.toml"
     content = pyproject.read_text()
     assert f'version = "{VERSION}"' in content
+
+
+def test_pyproject_version_matches_412():
+    """pyproject.toml version should be 4.1.2."""
+    import pathlib
+    pyproject = pathlib.Path(__file__).parent.parent / "pyproject.toml"
+    content = pyproject.read_text()
+    assert 'version = "4.1.2"' in content
 
 
 # ---------------------------------------------------------------------------

@@ -80,6 +80,9 @@ class AuditConfig:
     entropic_drop_tolerance: float | None = None
     max_role_lly_deficit: float | None = None
     max_ph_drift: float | None = None
+    # v4.1.2: bottleneck distance is a stricter PH drift metric
+    max_ph_bottleneck_drift: float | None = None
+    use_bottleneck_ph_drift: bool = False
 
     preserve_beta0: bool = True
     max_component_increase: int = 0
@@ -89,6 +92,18 @@ class AuditConfig:
     persistent_homology_enabled: bool = True
     require_persistent_homology: bool = False
     curvature_weight_mode: str = "unweighted_reference"
+
+    # v4.1.1 geometry-mode tiers: explicit separation of candidate,
+    # audit, and certificate geometry modes. When set, these override
+    # the single curvature_weight_mode flag for their respective tiers.
+    # - candidate_geometry: fast proxy for edge prioritization (topology/weighted)
+    # - audit_geometry: local curvature audit (metric_measure/unweighted)
+    # - certificate_geometry: global certification (metric_measure/unweighted)
+    # Empty string means "follow curvature_weight_mode".
+    candidate_geometry_mode: str = ""
+    audit_geometry_mode: str = ""
+    certificate_geometry_mode: str = ""
+
     role_lly_targets: dict[str, float] = field(default_factory=lambda: {
         "generic": 0.0,
         "cluster": 0.0,
@@ -181,6 +196,10 @@ def validate_config(cfg: LGAEConfig) -> LGAEConfig:
         raise ValueError("diagnostic_full_kernel_max_nodes must be positive")
     if cfg.audit.curvature_weight_mode not in ("unweighted_reference", "weighted"):
         raise ValueError("curvature_weight_mode must be 'unweighted_reference' or 'weighted'")
+    for tier_field in ("candidate_geometry_mode", "audit_geometry_mode", "certificate_geometry_mode"):
+        tier_val = getattr(cfg.audit, tier_field)
+        if tier_val and tier_val not in ("unweighted_reference", "weighted", "metric_measure", "topology_proxy"):
+            raise ValueError(f"{tier_field} must be empty, 'unweighted_reference', 'weighted', 'metric_measure', or 'topology_proxy'")
     if any(int(r) < 1 for r in cfg.audit.orc_radii):
         raise ValueError("orc_radii must contain positive integers")
     if cfg.audit.orc_backend not in {"sinkhorn_log", "exact_lp"}:
@@ -259,10 +278,14 @@ _GOVERNANCE_FIELDS = {
               "spectral_lobpcg_tol", "spectral_seed", "local_disconnect_gate",
               "max_integral_lly_deficit", "min_lambda2", "max_operator_discrepancy",
               "max_topology_drift", "max_cde_residual", "entropic_drop_tolerance",
-              "max_role_lly_deficit", "max_ph_drift", "preserve_beta0", "max_component_increase",
+              "max_role_lly_deficit", "max_ph_drift",
+              "max_ph_bottleneck_drift", "use_bottleneck_ph_drift",
+              "preserve_beta0", "max_component_increase",
               "entropic_require_success", "require_lly_crosscheck", "max_lly_crosscheck_error",
               "persistent_homology_enabled", "require_persistent_homology",
-              "curvature_weight_mode", "role_lly_targets"),
+              "curvature_weight_mode",
+              "candidate_geometry_mode", "audit_geometry_mode", "certificate_geometry_mode",
+              "role_lly_targets"),
     "mutation": ("mutation_interval", "audit_interval", "shadow_steps", "shadow_eta",
                  "max_edge_weight", "min_edge_weight", "edge_add_weight",
                  "quarantine_on_uncertainty", "require_state_hash_match",

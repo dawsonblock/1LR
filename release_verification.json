@@ -15,7 +15,7 @@
   },
   "editable_install": {
     "status": "pass",
-    "version": "4.1.1"
+    "version": "4.1.2"
   },
   "gauge_compile_smoke": {
     "gauge_grad_norm": 1.649509325772153e-07,
@@ -23,7 +23,7 @@
     "status": "pass"
   },
   "pytest": {
-    "passed": 162,
+    "passed": 227,
     "status": "pass"
   },
   "qualification": {
@@ -41,5 +41,5 @@
     "status": "pass"
   },
   "schema": "LGAE_V3_RELEASE_VERIFICATION_V1",
-  "version": "4.1.1"
+  "version": "4.1.2"
 }

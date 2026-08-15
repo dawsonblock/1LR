@@ -1,6 +1,6 @@
-# LGAE-v4.1.1 Sparse Governance Integrity Build Report
+# LGAE-v4.1.2 Geometry-Mode Tiers, Mutation Split, PH Bottleneck Build Report
 
-Build: `4.1.1`
+Build: `4.1.2`
 
 Base: `lgae_v3_merged_hardened` v3.1.0.
 
@@ -88,14 +88,22 @@ Base: `lgae_v3_merged_hardened` v3.1.0.
 
 ## Qualification
 
-- Pytest collection: **162 tests**.
-- Full test suite: **162/162 passed**.
+- Pytest collection: **227 tests**.
+- Full test suite: **227/227 passed**.
 - `scripts/qualify.py`: **PASS**.
 - Editable install with `--no-build-isolation`: **PASS**.
-- Installed CLI version/import check: **PASS** (`4.1.1`).
+- Installed CLI version/import check: **PASS** (`4.1.2`).
 - CPU Inductor fixed-shape compile smoke (`N=32,D=4,E=64`): **PASS**.
 - End-to-end CLI demo: **PASS**; candidate mutation reaches a governed `quarantine` decision rather than numerical failure.
 - Manifest verification: **PASS** (`scripts/generate_manifest.py --check`).
+
+### v4.1.2 additions
+
+- **Geometry-mode tiers**: candidate/audit/certificate modes with fallback to curvature_weight_mode
+- **Mutation split**: ReweightAffinity, ReweightLength, CoupledReweight with coupling policies
+- **PH bottleneck distance**: Hungarian-matched bottleneck distance replacing summary drift
+- **Multi-horizon fiber mutations**: max-severity aggregation for evaluate_latent_transition
+- **65 adversarial tests**: NaN/Inf/zero injection, disconnected graphs, extreme configs
 
 ### v4.1.1 fixes
 

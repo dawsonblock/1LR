@@ -1,13 +1,13 @@
 <div align="center">
 
-# LGAE-v4.1.1 / 1LR: Governed Adaptive Geometry Engine
+# LGAE-v4.1.2 / 1LR: Governed Adaptive Geometry Engine
 
 **A Multi-Timescale Geometric Controller for Self-Evolving Graph and Fiber-Bundle Latent Spaces**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.6+](https://img.shields.io/badge/PyTorch-2.6+-ee4c2c.svg)](https://pytorch.org/)
 [![CI Status](https://github.com/dawsonblock/1LR/actions/workflows/ci.yml/badge.svg)](https://github.com/dawsonblock/1LR/actions)
-[![Tests](https://img.shields.io/badge/tests-162%2F162%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-227%2F227%20passing-brightgreen.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Gauge: SO(d)](https://img.shields.io/badge/gauge-SO(d)%20Invariance-purple.svg)]()
 
@@ -18,6 +18,14 @@
 ## Overview
 
 **LGAE-v4.1 (`1LR`)** is a hardened geometric deep learning engine and dynamical controller. It operates over graph-structured data and continuous fiber bundles, combining continuous field diffusion, Lie-algebra gauge connections, discrete Ricci-flow surgery, and multi-operator curvature diagnostics.
+
+### v4.1.2 — Geometry-Mode Tiers, Mutation Split, PH Bottleneck
+
+- **Geometry-mode tier separation**: `candidate_geometry_mode`, `audit_geometry_mode`, `certificate_geometry_mode` allow independent configuration of the candidate proxy, audit, and certificate tiers. Empty values fall back to `curvature_weight_mode`.
+- **Metric-measure mutation split**: `ReweightAffinity`, `ReweightLength`, and `CoupledReweight` provide explicit control over which field (affinity, length, or both with coupling policy) a mutation affects. The legacy `ReweightEdge` remains for backward compatibility.
+- **PH bottleneck distance**: `persistent_homology_bottleneck_drift()` computes the proper bottleneck distance between persistence diagrams using Hungarian matching, replacing the summary-statistic drift when `use_bottleneck_ph_drift=True`.
+- **Multi-horizon fiber mutations**: `evaluate_latent_transition()` now applies the same max-severity multi-horizon certification as graph mutations.
+- **65 adversarial/numerical tests**: NaN/Inf/zero injection across affinity, length, latent, gauge, curvature, and transition probabilities. Disconnected graphs, bridge pruning, extreme configs. All fail closed.
 
 ### v4.1.1 — Sparse Governance Integrity
 
@@ -343,7 +351,7 @@ python scripts/generate_manifest.py --check   # verify manifest
 │   ├── operators.py          # Actuation & diagnostic Markov operators
 │   ├── receipts.py           # Cryptographic receipt logging
 │   └── topology.py           # NetworkX conversion, Betti numbers & PH
-└── tests/                    # 20 test modules with 162 verified unit/regression tests
+└── tests/                    # 22 test modules with 227 verified unit/regression tests
 ```
 
 ---

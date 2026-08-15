@@ -16,12 +16,20 @@ from .training import (
     LGAETrainCore, train_step, padded_markov_edges, refresh_padded_markov_edges_,
     padded_markov_edges_with_slots, refresh_padded_markov_edges_with_slots_,
 )
-from .mutations import RicciFlowReweight, MutationCooldownTracker
+from .mutations import (
+    AddEdge, ReweightEdge, ReweightAffinity, ReweightLength, CoupledReweight,
+    PruneEdge, RicciFlowReweight, MutationCooldownTracker,
+    mutation_to_spec, mutation_from_spec,
+)
 
 __all__ = [
     "LGAEConfig", "load_config", "config_structural_hash", "config_governance_hash",
     "LGAEEngine", "FixedWidthFiberLatent", "FiberController", "SOConnectionBank", "project_to_so_d",
     "DualOperatorState", "SparseDualOperatorState", "EdgeRole", "GraphBuffers", "make_graph_buffers", "make_bucketed_graph_buffers", "round_edge_capacity",
-    "MutationDecision", "MutationResult", "RicciFlowReweight", "MutationCooldownTracker", "LGAETrainCore", "train_step", "padded_markov_edges", "refresh_padded_markov_edges_", "padded_markov_edges_with_slots", "refresh_padded_markov_edges_with_slots_",
+    "MutationDecision", "MutationResult",
+    "AddEdge", "ReweightEdge", "ReweightAffinity", "ReweightLength", "CoupledReweight",
+    "PruneEdge", "RicciFlowReweight", "MutationCooldownTracker",
+    "mutation_to_spec", "mutation_from_spec",
+    "LGAETrainCore", "train_step", "padded_markov_edges", "refresh_padded_markov_edges_", "padded_markov_edges_with_slots", "refresh_padded_markov_edges_with_slots_",
 ]
 from .version import VERSION as __version__
