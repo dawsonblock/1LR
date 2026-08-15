@@ -1,6 +1,6 @@
-# LGAE-v4.1.3 Deep Audit: Sparse Scaling, Float64 Discrepancy, ANN Index Build Report
+# LGAE-v5.0.0 Deep Audit: Sparse Scaling, Float64 Discrepancy, ANN Index Build Report
 
-Build: `4.1.3`
+Build: `5.0.0`
 
 Base: `lgae_v3_merged_hardened` v3.1.0.
 
@@ -88,17 +88,17 @@ Base: `lgae_v3_merged_hardened` v3.1.0.
 
 ## Qualification
 
-- Pytest collection: **357 tests**.
-- Full test suite: **357/357 passed**.
+- Pytest collection: **448 tests**.
+- Full test suite: **448/448 passed**.
 - `scripts/qualify.py`: **PASS**.
 - Editable install with `--no-build-isolation`: **PASS**.
-- Installed CLI version/import check: **PASS** (`4.1.3`).
+- Installed CLI version/import check: **PASS** (`5.0.0`).
 - CPU Inductor fixed-shape compile smoke (`N=32,D=4,E=64`): **PASS**.
 - End-to-end CLI demo: **PASS**; candidate mutation reaches a governed `quarantine` decision rather than numerical failure.
 - Manifest verification: **PASS** (`scripts/generate_manifest.py --check`).
 - N=2500 sparse governor audit: **PASS** (3.2s, no global dense allocation).
 
-### v4.1.3 additions
+### v5.0.0 additions
 
 - **Analytic vertex selection**: union of transport pressure, LLY, discrepancy, touched nodes
 - **Local neighborhood cap**: max_local_nodes=256, radius=1 → N=2500 audit 73s→3.2s

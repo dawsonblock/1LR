@@ -104,7 +104,7 @@ def generate_manifest(repo_root: Path) -> dict:
     entries.sort(key=lambda e: e["path"])
     return {
         "schema": "LGAE_V3_MANIFEST_V4",
-        "version": "4.1.3",
+        "version": "5.0.0",
         "manifest_excludes": sorted(MANIFEST_EXCLUDES),
         "file_count": len(entries),
         "files": entries,

@@ -20,7 +20,7 @@ def test_engine_smoke_and_compatibility_imports():
 def test_cli_demo_serializes(capsys):
     from lgae_v3.cli import main
     assert main(["demo","--nodes","6","--steps","1"])==0
-    assert '"version": "4.1.3"' in capsys.readouterr().out
+    assert '"version": "5.0.0"' in capsys.readouterr().out
 
 def test_quarantine_resolution_does_not_require_parameter_replacement():
     from lgae_v3.mutations import AddEdge

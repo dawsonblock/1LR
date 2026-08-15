@@ -5,7 +5,7 @@ qualification, release report) should import from this module rather than
 hardcoding version strings.
 """
 
-VERSION = "4.1.3"
+VERSION = "5.0.0"
 SCHEMA_VERSION = "LGAE_GEOMETRY_V4_1_1"
 QUALIFICATION_SCHEMA = "LGAE_QUALIFICATION_V4_1_1"
 CHECKPOINT_SCHEMA = "LGAE_V3_CHECKPOINT_V4"

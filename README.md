@@ -1,6 +1,6 @@
 <div align="center">
 
-# LGAE-v4.1.3 / 1LR: Governed Adaptive Geometry Engine
+# LGAE-v5.0.0 / 1LR: Governed Adaptive Geometry Engine
 
 **A Multi-Timescale Geometric Controller for Self-Evolving Graph and Fiber-Bundle Latent Spaces**
 
@@ -18,6 +18,38 @@
 ## Overview
 
 **LGAE-v4.1 (`1LR`)** is a hardened geometric deep learning engine and dynamical controller. It operates over graph-structured data and continuous fiber bundles, combining continuous field diffusion, Lie-algebra gauge connections, discrete Ricci-flow surgery, and multi-operator curvature diagnostics.
+
+### v5.0.0 — Structural Learning Loop
+
+The architectural jump from "geometry detects → rules propose → governor validates" to:
+
+```
+geometry observes → learned executive predicts → counterfactuals compete → governor certifies → outcomes train the executive
+```
+
+**Five priority additions:**
+
+1. **Learned structural executive** (`executive.py`): A proposal model that observes local geometry, task residuals, uncertainty, capacity, edge role, and recent mutation history, then scores structural actions (NO_OP, ADD_EDGE, PRUNE_EDGE, REWEIGHT_AFFINITY, REWEIGHT_LENGTH, SPAWN_FIBER, PRUNE_FIBER, CHANGE_GAUGE, COUPLED_REWEIGHT). Objective: `m* = argmax[E[ΔU(m)] + ν·IG(m) - λ·C(m) - μ·R(m)]`. Proposal generator only; governor remains authority.
+
+2. **Long-term mutation credit assignment** (`credit.py`): Tracks mutation receipts and outcomes at horizons {16, 100, 1000}. Discounted return: `R = Σ γ^τ ΔU_{t+τ}`. The executive learns from its own structural history by comparing initial predictions to long-term outcomes.
+
+3. **Calibrated uncertainty** (`uncertainty.py`): Ensemble-based epistemic uncertainty `p(ΔU|m,S)`. LCB acceptance gate: `LCB(m) = E[ΔU_m] - β·σ_m`. Only positive LCB → auto-accept; uncertain but interesting → QUARANTINE. Conformal calibration with coverage guarantees.
+
+4. **Stability/plasticity + consolidation** (`consolidation.py`): Capacity budget `B_t = Σ d_i + α|E|`. Growth justification `ΔU/ΔB > τ_efficiency`. Fiber lifecycle: NEW → PROBATION → MATURE → PROTECTED / UNUSED → PRUNE. Probation gate `g(t)` slowly increases, giving new fibers time to integrate before evaluation.
+
+5. **Task-grounded benchmark harness** (`benchmark/`): 6 synthetic tasks with known-optimal structural changes:
+   - Task A: Long-range bottleneck → ADD_EDGE
+   - Task B: Local representational complexity → SPAWN_FIBER
+   - Task C: Noisy spurious edge → PRUNE_EDGE
+   - Task D: Coordinate-frame mismatch → CHANGE_GAUGE
+   - Task E: Distribution shift → SPAWN_FIBER
+   - Task F: Nothing wrong → NO_OP
+
+   Metrics: structural diagnosis accuracy and mutation regret `R_t = U(m_t*) - U(m_t)`.
+
+**Structural counterfactual engine** (`counterfactual.py`): Compares multiple candidate actions from the same state. NO_OP is always included as baseline. If no candidate beats NO_OP after accounting for risk and cost, the system does nothing.
+
+**Closed loop** (`structural_loop.py`): Ties everything together — observe, predict, counterfactual, certify, execute, train.
 
 ### v4.1.3 — Deep Audit: Sparse Scaling, Float64 Discrepancy, ANN Index
 
@@ -365,7 +397,7 @@ python scripts/generate_manifest.py --check   # verify manifest
 │   ├── operators.py          # Actuation & diagnostic Markov operators
 │   ├── receipts.py           # Cryptographic receipt logging
 │   └── topology.py           # NetworkX conversion, Betti numbers & PH
-└── tests/                    # 24 test modules with 357 verified unit/regression tests
+└── tests/                    # 27 test modules with 448 verified unit/regression tests
 ```
 
 ---

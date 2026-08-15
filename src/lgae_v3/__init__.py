@@ -26,6 +26,26 @@ from .neighbor_index import (
     NeighborIndex, ExactChunkedKNN, KNNGraphResult,
     build_knn_graph, recall_at_k,
 )
+from .executive import (
+    StructuralExecutive, ExecutiveNetwork, ActionProposal, StructuralObservation,
+    StructuralAction, ACTION_LIST, ACTION_TO_IDX, NUM_ACTIONS,
+)
+from .uncertainty import (
+    EnsembleUncertainty, ConformalCalibrator, UncertaintyEstimate,
+    uncertainty_gated_decision,
+)
+from .credit import (
+    MutationCreditTracker, MutationReceipt, MutationOutcome,
+)
+from .consolidation import (
+    StabilityPlasticityController, FiberState, FiberLifecycleStage, CapacityBudget,
+)
+from .counterfactual import (
+    StructuralCounterfactualEngine, CounterfactualResult,
+)
+from .structural_loop import (
+    StructuralLearningLoop, StructuralLoopResult,
+)
 
 __all__ = [
     "LGAEConfig", "load_config", "config_structural_hash", "config_governance_hash",
