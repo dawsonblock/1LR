@@ -119,8 +119,8 @@
     },
     {
       "path": "src/lgae_v3/ann_index.py",
-      "bytes": 11589,
-      "sha256": "7a8c1ba5e7a461bbcc90b1bcbf26d095470aa17e8656bd81f9f2c970e5bee56a"
+      "bytes": 11871,
+      "sha256": "4119c908f837df18cea896d802b6e49889b00e31e510465d1a1d3bb30e92891d"
     },
     {
       "path": "src/lgae_v3/benchmark/__init__.py",

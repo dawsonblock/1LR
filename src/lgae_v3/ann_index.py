@@ -139,8 +139,13 @@ class HNSWIndexNumpy:
             else:
                 top_partitions = [0]
 
-            # Search within top partitions
-            candidates = np.concatenate([self._partitions[p] for p in top_partitions])
+            # Search within top partitions (filter out empty partitions)
+            valid_partitions = [self._partitions[p] for p in top_partitions
+                               if p < len(self._partitions) and len(self._partitions[p]) > 0]
+            if valid_partitions:
+                candidates = np.concatenate(valid_partitions)
+            else:
+                candidates = np.arange(len(self._data))
             if len(candidates) == 0:
                 candidates = np.arange(len(self._data))
 
