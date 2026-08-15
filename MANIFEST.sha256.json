@@ -4,8 +4,13 @@
   "manifest_excludes": [
     "MANIFEST.sha256.json"
   ],
-  "file_count": 65,
+  "file_count": 66,
   "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "bytes": 1177,
+      "sha256": "4e828cc207f40f8bd2e9c8052eb1443fee2e76bf6795f4315f675f03d393f4ee"
+    },
     {
       "path": "BUILD_REPORT.md",
       "bytes": 4088,
@@ -63,8 +68,8 @@
     },
     {
       "path": "pyproject.toml",
-      "bytes": 786,
-      "sha256": "638c2cbd974060d33b6f8b5857b73b4294dc02df3492480bcdc2ad2a64751173"
+      "bytes": 777,
+      "sha256": "986a6fba802b35165ff19677c5aaf804555ad5e2cbe379d84edcd9cca4c33626"
     },
     {
       "path": "qualification_report.json",

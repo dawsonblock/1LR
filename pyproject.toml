@@ -8,7 +8,7 @@ version = "3.2.0"
 description = "Laplacian Geometric Adaptive Evolution v3: multi-timescale geometric controller with fibers and curvature audits"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = "MIT"
 authors = [{name = "LGAE-v3 project"}]
 dependencies = [
   "torch>=2.6",

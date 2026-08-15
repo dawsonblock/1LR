@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test & Qualify (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install -e '.[dev]' --no-build-isolation
+
+      - name: Run test suite with warnings as errors
+        run: |
+          pytest -v -W error
+
+      - name: Run qualification oracles suite
+        run: |
+          python scripts/qualify.py
+
+      - name: Run CLI smoke tests
+        run: |
+          lgae-v3 demo --nodes 8 --steps 2
+          lgae-v3 qualify-lly --graph cycle --nodes 6
+          lgae-v3 qualify-lly --graph path --nodes 4
+          lgae-v3 qualify-lly --graph complete --nodes 4
