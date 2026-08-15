@@ -17,6 +17,29 @@ def _lazy_measure(g: nx.Graph, x: int, p: float) -> tuple[list[int], np.ndarray]
     return nodes, mass
 
 
+def _weighted_lazy_measure(g: nx.Graph, x: int, p: float) -> tuple[list[int], np.ndarray]:
+    """Weight-aware lazy random-walk measure.
+
+    The idle mass p stays at x; the remaining (1-p) is distributed to
+    neighbors proportionally to edge weights (not uniformly). This is the
+    correct lazy measure for a weighted graph Markov chain.
+    """
+    nbrs = list(g.neighbors(x))
+    if not nbrs:
+        return [x], np.array([1.0], dtype=float)
+    nodes = [x] + nbrs
+    weights = np.array([g[x][u].get("weight", 1.0) for u in nbrs], dtype=float)
+    total = weights.sum()
+    if total <= 0:
+        # Degenerate: fall back to uniform
+        mass = np.full(len(nodes), (1.0 - p) / len(nbrs), dtype=float)
+    else:
+        mass = np.zeros(len(nodes), dtype=float)
+        mass[1:] = (1.0 - p) * weights / total
+    mass[0] = p
+    return nodes, mass
+
+
 def _transport_lp(cost: np.ndarray, a: np.ndarray, b: np.ndarray) -> float:
     m, n = cost.shape
     c = cost.reshape(-1)
@@ -132,6 +155,22 @@ def _edge_cost(g: nx.Graph, left: list[int], right: list[int]) -> np.ndarray:
     return cost
 
 
+def _weighted_edge_cost(g: nx.Graph, left: list[int], right: list[int]) -> np.ndarray:
+    """Weighted shortest-path cost matrix.
+
+    Uses Dijkstra with edge weights as distances. This is the correct
+    ground cost for weighted Ollivier curvature.
+    """
+    cost = np.empty((len(left), len(right)), dtype=float)
+    for i, x in enumerate(left):
+        lengths = nx.single_source_dijkstra_path_length(g, x, weight="weight")
+        for j, y in enumerate(right):
+            if y not in lengths:
+                raise ValueError("weighted Ollivier transport requires connected support metric")
+            cost[i, j] = lengths[y]
+    return cost
+
+
 def ollivier_edge(
     g: nx.Graph,
     u: int,
@@ -171,6 +210,43 @@ def ollivier_edge(
 def ollivier_curvatures(g: nx.Graph, p: float = 0.0, edges=None, **kwargs) -> dict[tuple[int, int], float]:
     target = g.edges() if edges is None else edges
     return {(int(u), int(v)): ollivier_edge(g, int(u), int(v), p=p, **kwargs) for u, v in target}
+
+
+def weighted_ollivier_edge(
+    g: nx.Graph,
+    u: int,
+    v: int,
+    p: float = 0.0,
+    *,
+    backend: str = "exact_lp",
+    sinkhorn_epsilon: float = 0.05,
+    sinkhorn_max_iter: int = 200,
+    sinkhorn_tolerance: float = 1e-6,
+) -> float:
+    """p-idle Ollivier curvature on a weighted graph edge.
+
+    The lazy measure distributes (1-p) mass to neighbors proportionally
+    to edge weights. The ground cost uses weighted shortest-path distances
+    (Dijkstra). This is the weighted counterpart to ``ollivier_edge``.
+    """
+    if not (0.0 <= p <= 1.0):
+        raise ValueError("p must lie in [0,1]")
+    if not g.has_edge(u, v):
+        raise ValueError("weighted_ollivier_edge currently expects an edge")
+    if backend not in {"exact_lp", "sinkhorn_log"}:
+        raise ValueError("unknown Ollivier backend")
+    left, a = _weighted_lazy_measure(g, u, p)
+    right, b = _weighted_lazy_measure(g, v, p)
+    cost = _weighted_edge_cost(g, left, right)
+    if backend == "exact_lp":
+        w1 = _transport_lp(cost, a, b)
+    else:
+        w1 = log_sinkhorn_wasserstein(
+            cost, a, b, epsilon=sinkhorn_epsilon,
+            max_iter=sinkhorn_max_iter, tolerance=sinkhorn_tolerance,
+        )
+    d = nx.dijkstra_path_length(g, u, v, weight="weight")
+    return float(1.0 - w1 / float(d))
 
 
 def _uniform_ball_measure(g: nx.Graph, x: int, radius: int) -> tuple[list[int], np.ndarray]:

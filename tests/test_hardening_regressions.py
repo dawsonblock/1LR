@@ -117,5 +117,9 @@ def test_entropic_solver_failure_is_not_optimistic(monkeypatch):
 def test_unweighted_reference_mode_is_explicit():
     cfg = LGAEConfig()
     cfg.audit.curvature_weight_mode = "weighted"
-    with pytest.raises(ValueError, match="unweighted_reference"):
+    # v4.0: weighted mode is now supported
+    validate_config(cfg)
+    # Invalid mode should still be rejected
+    cfg.audit.curvature_weight_mode = "invalid_mode"
+    with pytest.raises(ValueError, match="curvature_weight_mode"):
         validate_config(cfg)

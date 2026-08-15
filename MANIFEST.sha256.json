@@ -5,7 +5,7 @@
     ".gitignore",
     "MANIFEST.sha256.json"
   ],
-  "file_count": 69,
+  "file_count": 70,
   "files": [
     {
       "path": ".github/workflows/ci.yml",
@@ -14,8 +14,8 @@
     },
     {
       "path": "BUILD_REPORT.md",
-      "bytes": 5470,
-      "sha256": "0aa0b6ca9667a0b2d0f85978ef34ff558a3d32e74332bff33c84facc366b5250"
+      "bytes": 6256,
+      "sha256": "b44d4711d2a8046ecbafb792be223519cae4c40ca397c050e690637794d88f28"
     },
     {
       "path": "LICENSE",
@@ -24,8 +24,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 15215,
-      "sha256": "36bffa36759c2d1d9cb350db5f9038810ff9f780cdf33ae04842c020c4f7ac1a"
+      "bytes": 16018,
+      "sha256": "4554aa217e9716c5cf50f3f14fc7f53e7fd5931848cd847751e9360df2283f00"
     },
     {
       "path": "configs/default.yaml",
@@ -70,7 +70,7 @@
     {
       "path": "pyproject.toml",
       "bytes": 883,
-      "sha256": "fdf008142d02b18d92cb0b02f11ba9e3cfcc9bc50a5004e86d4d9aec00e47f09"
+      "sha256": "d4cd1c7b30e02ff72dfc348a0153adc70f253189f797eb5d539597a23984ece4"
     },
     {
       "path": "qualification_report.json",
@@ -79,8 +79,8 @@
     },
     {
       "path": "release_verification.json",
-      "bytes": 1065,
-      "sha256": "e2dac108ef1d72f907e79ac4b0e0b89192877b020f1c378f1a4c21c0e24aff2d"
+      "bytes": 1066,
+      "sha256": "be520c8a074432700dab05dc17a7e59e5565334f772f301b2ab27ab3f9b98bf3"
     },
     {
       "path": "requirements-verified.txt",
@@ -114,8 +114,8 @@
     },
     {
       "path": "src/lgae_v3/__init__.py",
-      "bytes": 1368,
-      "sha256": "070839c265b476d66622b21aaf2f737e085ee967ef7f0fb9da1d5c7a13fee8fa"
+      "bytes": 1420,
+      "sha256": "50f57a9ae89c6b972b0f6dcc4511f8be424209b6d4932439e631088b37209e78"
     },
     {
       "path": "src/lgae_v3/cli.py",
@@ -134,8 +134,8 @@
     },
     {
       "path": "src/lgae_v3/config.py",
-      "bytes": 12240,
-      "sha256": "f037ca66d981c213dc0ba16cdbf1ae32012857fadecf93d1f28336d930d50202"
+      "bytes": 12233,
+      "sha256": "e4dc92ff0542bb64c0dcfab0e3cb0c23985e01cbd055b81f7f32cd14e1fea615"
     },
     {
       "path": "src/lgae_v3/core/__init__.py",
@@ -159,8 +159,8 @@
     },
     {
       "path": "src/lgae_v3/curvature/__init__.py",
-      "bytes": 1245,
-      "sha256": "3928e79e8ceb77fb18cf823eee224b98e6ad718b22a8d489268870f9c476f129"
+      "bytes": 1505,
+      "sha256": "20ce2bbc0b108b2cacc93d64668f5649be2ffec154a8310555a30feda9ed1a96"
     },
     {
       "path": "src/lgae_v3/curvature/bakry_emery.py",
@@ -179,18 +179,18 @@
     },
     {
       "path": "src/lgae_v3/curvature/forman.py",
-      "bytes": 1249,
-      "sha256": "59dc14c55832f345e273b556ddaa17ebd533c27afa1a1d1cc125c0fa6149f766"
+      "bytes": 3159,
+      "sha256": "a7c9317f9c09d29dc80e8b89707e8c000886e34ee212fa455d317cdd24510431"
     },
     {
       "path": "src/lgae_v3/curvature/lly.py",
-      "bytes": 2559,
-      "sha256": "961dc5a2a36f7b0dc9e04d2459e0176f6c7cfcdc3786eb9dc4bdec7fb2b3e173"
+      "bytes": 5586,
+      "sha256": "50215f039927e4979423d4b9cbacb097b7601c355eaa2b60955b8842544103bc"
     },
     {
       "path": "src/lgae_v3/curvature/ollivier.py",
-      "bytes": 7605,
-      "sha256": "b0a4206e7075cd295c57955291f23e109137edb416a1d88f1f35bd9ef6d4a618"
+      "bytes": 10421,
+      "sha256": "5856bc66dce2296f833e91a1207c1db9276eb52dffe6ef79fc008eb95cbcc9e8"
     },
     {
       "path": "src/lgae_v3/evolution.py",
@@ -204,8 +204,8 @@
     },
     {
       "path": "src/lgae_v3/governor.py",
-      "bytes": 18983,
-      "sha256": "149a2b1e33c4f84ad0f05bf5861e01189be5440a660ae0c03c0c8aa96d6518ca"
+      "bytes": 21067,
+      "sha256": "34f09b06bee9fe50452500e9b0e43e192666f6d2b4d91b010c7546be52a2c250"
     },
     {
       "path": "src/lgae_v3/kernels.py",
@@ -224,8 +224,8 @@
     },
     {
       "path": "src/lgae_v3/operators.py",
-      "bytes": 14539,
-      "sha256": "b97bb9895ad93ec609fcce6b610900387ec32368911b59e193edbac8e0f19a88"
+      "bytes": 24861,
+      "sha256": "31d03deed3c0da19075d9dee25b6045d31e5ccd0b554bbe11012f2d3af612032"
     },
     {
       "path": "src/lgae_v3/receipts.py",
@@ -309,8 +309,8 @@
     },
     {
       "path": "tests/test_hardening_regressions.py",
-      "bytes": 4740,
-      "sha256": "4c96cc9eb2e908dbdc208e37b046bdbe44a366c2671f8d0a96e93ef7a6b2fe3e"
+      "bytes": 4906,
+      "sha256": "43429ee72b9827ce02dcc441dc5eb179bd1113fab0e8d717ee362275600d942b"
     },
     {
       "path": "tests/test_lly.py",
@@ -336,6 +336,11 @@
       "path": "tests/test_slot_lifecycle.py",
       "bytes": 5053,
       "sha256": "e525bbba359e118b035800212902891d3f07e089d38c7c50d60375e56c466a93"
+    },
+    {
+      "path": "tests/test_sparse_weighted.py",
+      "bytes": 11583,
+      "sha256": "6bebb5aa31ab478c11d097940a384dba6f8020e2e74838aa39524972fe526f1d"
     },
     {
       "path": "tests/test_training_merge.py",

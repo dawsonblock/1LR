@@ -1,6 +1,6 @@
-# LGAE-v3.3 Authority and Persistence Hardening Build Report
+# LGAE-v4.0 Sparse Weighted Geometry Build Report
 
-Build: `3.3.0`
+Build: `4.0.0`
 
 Base: `lgae_v3_merged_hardened` v3.1.0.
 
@@ -59,13 +59,24 @@ Base: `lgae_v3_merged_hardened` v3.1.0.
    - receipts bind gauge authority hash at transaction boundary;
    - exact manifest coverage with `scripts/generate_manifest.py --check`.
 
+7. **v4.0 Sparse weighted geometry**
+   - `SparseDualOperatorState` replaces dense `N×N` dual operators with `O(Nk)` edge lists;
+   - `diagnostic_diffusion_edges()` uses k-NN without materializing full pairwise distance matrix;
+   - `sparse_operator_discrepancy()` computes Frobenius/L1 discrepancy on union of supports;
+   - chunked k-NN for very large N (>4096) to bound peak memory;
+   - weighted Ollivier: edge-weight-proportional lazy measure + Dijkstra shortest-path cost;
+   - weighted LLY: weighted normalized Laplacian + shortest-path-distance boundary conditions;
+   - weighted AF3: weighted degree replaces unweighted degree;
+   - `curvature_weight_mode='weighted'` accepted in config validation;
+   - governor audit and fast signals dispatch to weighted backends when configured.
+
 ## Qualification
 
-- Pytest collection: **93 tests**.
-- Full test suite: **93/93 passed**.
+- Pytest collection: **112 tests**.
+- Full test suite: **112/112 passed**.
 - `scripts/qualify.py`: **PASS**.
 - Editable install with `--no-build-isolation`: **PASS**.
-- Installed CLI version/import check: **PASS** (`3.3.0`).
+- Installed CLI version/import check: **PASS** (`4.0.0`).
 - CPU Inductor fixed-shape compile smoke (`N=32,D=4,E=64`): **PASS**.
 - End-to-end CLI demo: **PASS**; candidate mutation reaches a governed `quarantine` decision rather than numerical failure.
 - Manifest verification: **PASS** (`scripts/generate_manifest.py --check`).

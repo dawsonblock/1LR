@@ -10,8 +10,11 @@ from .config import LGAEConfig
 from .curvature import (
     af3_edge,
     degree_weighted_af3_proxy,
+    weighted_af3_edge,
     lly_laplacian_lp,
     lly_half_idleness,
+    weighted_lly_laplacian_lp,
+    weighted_lly_half_idleness,
     integral_lly_deficit,
     weak_entropic_graph_detailed,
     bakry_emery_curvature,
@@ -26,6 +29,7 @@ from .operators import (
     actuation_markov_edges,
     diagnostic_diffusion_operator,
     DualOperatorState,
+    SparseDualOperatorState,
     generator_from_markov,
     sparse_laplacian_step,
     spectral_gap_symmetric,
@@ -59,18 +63,43 @@ class GeometryGovernor:
         self.cfg = cfg
 
     def operators(self, graph: GraphBuffers, z: Tensor) -> DualOperatorState:
-        pa = actuation_operator(
-            graph,
+        """Build dual operators.
+
+        For N <= diagnostic_full_kernel_max_nodes, uses the dense exact path.
+        For larger N, uses the sparse edge-based path to avoid O(N²) memory.
+        """
+        n = graph.num_nodes
+        if n <= self.cfg.operator.diagnostic_full_kernel_max_nodes:
+            pa = actuation_operator(
+                graph,
+                symmetric=self.cfg.operator.symmetric_actuation,
+                self_loop=self.cfg.operator.self_loop,
+            )
+            pd = diagnostic_diffusion_operator(
+                z,
+                k=self.cfg.operator.diagnostic_k,
+                epsilon_floor=self.cfg.operator.diagnostic_epsilon_floor,
+                full_kernel_max_nodes=self.cfg.operator.diagnostic_full_kernel_max_nodes,
+            )
+            return DualOperatorState(pa, pd)
+        # Sparse path for large N: avoid O(N²) allocation
+        return SparseDualOperatorState.from_graph_and_latent(
+            graph, z,
             symmetric=self.cfg.operator.symmetric_actuation,
             self_loop=self.cfg.operator.self_loop,
+            diagnostic_k=self.cfg.operator.diagnostic_k,
+            diagnostic_epsilon_floor=self.cfg.operator.diagnostic_epsilon_floor,
+        ).to_dense() if n <= 2048 else self._sparse_operators(graph, z)
+
+    def _sparse_operators(self, graph: GraphBuffers, z: Tensor) -> "SparseDualOperatorState":
+        """Return sparse dual operators for large N."""
+        return SparseDualOperatorState.from_graph_and_latent(
+            graph, z,
+            symmetric=self.cfg.operator.symmetric_actuation,
+            self_loop=self.cfg.operator.self_loop,
+            diagnostic_k=self.cfg.operator.diagnostic_k,
+            diagnostic_epsilon_floor=self.cfg.operator.diagnostic_epsilon_floor,
         )
-        pd = diagnostic_diffusion_operator(
-            z,
-            k=self.cfg.operator.diagnostic_k,
-            epsilon_floor=self.cfg.operator.diagnostic_epsilon_floor,
-            full_kernel_max_nodes=self.cfg.operator.diagnostic_full_kernel_max_nodes,
-        )
-        return DualOperatorState(pa, pd)
 
     def fast_signals(self, graph: GraphBuffers, z: Tensor) -> FastSignals:
         src, dst, pw = actuation_markov_edges(
@@ -80,7 +109,10 @@ class GeometryGovernor:
         )
         m = edge_diffusion_metrics(z, src, dst, pw, graph.num_nodes)
         g = graphbuffers_to_networkx(graph)
-        af = {(int(u), int(v)): af3_edge(g, int(u), int(v)) for u, v in g.edges()}
+        if self.cfg.audit.curvature_weight_mode == "weighted":
+            af = {(int(u), int(v)): weighted_af3_edge(g, int(u), int(v)) for u, v in g.edges()}
+        else:
+            af = {(int(u), int(v)): af3_edge(g, int(u), int(v)) for u, v in g.edges()}
         waf = {(int(u), int(v)): degree_weighted_af3_proxy(g, int(u), int(v)) for u, v in g.edges()}
         return FastSignals(m["gamma"], m["radius"], m["local_var"], af, waf)
 
@@ -130,7 +162,11 @@ class GeometryGovernor:
             tol=self.cfg.audit.spectral_lobpcg_tol,
             seed=self.cfg.audit.spectral_seed + seed,
         )
-        discrepancy = float(ops.discrepancy(self.cfg.operator.operator_discrepancy).item())
+        # Compute discrepancy: use sparse path for large N
+        if isinstance(ops, SparseDualOperatorState):
+            discrepancy = float(ops.discrepancy(self.cfg.operator.operator_discrepancy).item())
+        else:
+            discrepancy = float(ops.discrepancy(self.cfg.operator.operator_discrepancy).item())
         topo = topology_signature(g)
         ph = persistent_homology_signature(z) if self.cfg.audit.persistent_homology_enabled else None
         details: dict = {
@@ -175,9 +211,14 @@ class GeometryGovernor:
         lly: dict[tuple[int, int], float] = {}
         cross_err = 0.0
         role_deficit = 0.0
+        use_weighted = self.cfg.audit.curvature_weight_mode == "weighted"
         for u, v in target_edges:
-            a = lly_laplacian_lp(g, int(u), int(v))
-            b = lly_half_idleness(g, int(u), int(v))
+            if use_weighted:
+                a = weighted_lly_laplacian_lp(g, int(u), int(v))
+                b = weighted_lly_half_idleness(g, int(u), int(v))
+            else:
+                a = lly_laplacian_lp(g, int(u), int(v))
+                b = lly_half_idleness(g, int(u), int(v))
             lly[(int(u), int(v))] = a
             cross_err = max(cross_err, abs(a - b))
             role = str(g[int(u)][int(v)].get("role", "generic"))

@@ -172,8 +172,8 @@ def validate_config(cfg: LGAEConfig) -> LGAEConfig:
         raise ValueError("diagnostic_k must be positive")
     if cfg.operator.diagnostic_full_kernel_max_nodes < 1:
         raise ValueError("diagnostic_full_kernel_max_nodes must be positive")
-    if cfg.audit.curvature_weight_mode != "unweighted_reference":
-        raise ValueError("v3.2 reference curvature backends support only curvature_weight_mode='unweighted_reference'")
+    if cfg.audit.curvature_weight_mode not in ("unweighted_reference", "weighted"):
+        raise ValueError("curvature_weight_mode must be 'unweighted_reference' or 'weighted'")
     if any(int(r) < 1 for r in cfg.audit.orc_radii):
         raise ValueError("orc_radii must contain positive integers")
     if cfg.audit.orc_backend not in {"sinkhorn_log", "exact_lp"}:

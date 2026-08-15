@@ -1,6 +1,6 @@
-from .forman import af3_edge, af3_curvatures, degree_weighted_af3_proxy
-from .ollivier import ollivier_edge, ollivier_curvatures, multiscale_ollivier_edge, log_sinkhorn_wasserstein
-from .lly import lly_half_idleness, lly_laplacian_lp, integral_lly_deficit, crosscheck_lly
+from .forman import af3_edge, af3_curvatures, degree_weighted_af3_proxy, weighted_af3_edge, weighted_af3_curvatures
+from .ollivier import ollivier_edge, ollivier_curvatures, multiscale_ollivier_edge, log_sinkhorn_wasserstein, weighted_ollivier_edge
+from .lly import lly_half_idleness, lly_laplacian_lp, integral_lly_deficit, crosscheck_lly, weighted_lly_half_idleness, weighted_lly_laplacian_lp
 from .entropic import (
     WeakEntropicNodeResult,
     weak_entropic_node,
@@ -12,9 +12,10 @@ from .bakry_emery import bakry_emery_curvature, bakry_emery_curvature_matrix, st
 from .cde import sampled_cde_prime_residual
 
 __all__ = [
-    "af3_edge", "af3_curvatures", "degree_weighted_af3_proxy",
-    "ollivier_edge", "ollivier_curvatures", "multiscale_ollivier_edge", "log_sinkhorn_wasserstein",
+    "af3_edge", "af3_curvatures", "degree_weighted_af3_proxy", "weighted_af3_edge", "weighted_af3_curvatures",
+    "ollivier_edge", "ollivier_curvatures", "multiscale_ollivier_edge", "log_sinkhorn_wasserstein", "weighted_ollivier_edge",
     "lly_half_idleness", "lly_laplacian_lp", "integral_lly_deficit", "crosscheck_lly",
+    "weighted_lly_half_idleness", "weighted_lly_laplacian_lp",
     "WeakEntropicNodeResult", "weak_entropic_node", "weak_entropic_node_detailed",
     "weak_entropic_graph", "weak_entropic_graph_detailed",
     "bakry_emery_curvature", "bakry_emery_curvature_matrix", "stationary_measure_from_markov", "validate_reversible_markov", "normalized_markov_generator", "sampled_cde_prime_residual",

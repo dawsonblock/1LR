@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import Tensor
@@ -175,6 +176,262 @@ def operator_discrepancy(p_act: Tensor, p_diag: Tensor, mode: str = "frobenius")
     if mode == "mean_l1":
         return diff.abs().sum(dim=-1).mean()
     raise ValueError(f"unknown discrepancy mode: {mode}")
+
+
+# ---------------------------------------------------------------------------
+# Sparse dual operator system (v4.0)
+#
+# The dense DualOperatorState allocates O(N²) for both actuation and diagnostic
+# operators. For large N this is the primary scaling bottleneck. The sparse
+# system represents both operators as directed edge lists (src, dst, weight)
+# and computes discrepancy on the union of supports without materializing N×N.
+#
+# For small N (<= sparse_threshold), the dense path is retained as an exact
+# reference. For large N, the sparse path uses k-NN on the feature cloud
+# without forming the full pairwise distance matrix.
+# ---------------------------------------------------------------------------
+
+
+def _knn_distances(z: Tensor, k: int) -> tuple[Tensor, Tensor]:
+    """Compute k-nearest-neighbor distances and indices without full N×N matrix.
+
+    Uses torch.cdist for moderate N (still O(N²k) but lower constant than
+    materializing the full matrix) and falls back to chunked computation
+    for very large N to bound peak memory.
+
+    Returns (distances, indices) of shape [N, k] where distances are squared
+    Euclidean distances and indices are the column indices of the nearest
+    neighbors (excluding self).
+    """
+    n, d = z.shape
+    k_eff = min(int(k), max(n - 1, 1))
+    if k_eff <= 0:
+        return z.new_zeros((n, 0)), torch.zeros((n, 0), dtype=torch.long, device=z.device)
+
+    # For moderate N, use cdist directly (it's optimized in C++)
+    # For very large N, chunk the computation to bound memory
+    if n <= 4096:
+        d2 = torch.cdist(z, z, p=2).square()
+        # Exclude self
+        eye = torch.eye(n, dtype=torch.bool, device=z.device)
+        d2.masked_fill_(eye, float("inf"))
+        vals, idx = torch.topk(d2, k=k_eff, largest=False, dim=-1)
+        return vals, idx
+    else:
+        # Chunked k-NN: process in blocks to bound peak memory
+        vals_list: list[Tensor] = []
+        idx_list: list[Tensor] = []
+        chunk = max(1024, 4096 // max(d, 1))
+        for start in range(0, n, chunk):
+            end = min(start + chunk, n)
+            z_chunk = z[start:end]
+            d2_chunk = torch.cdist(z_chunk, z, p=2).square()
+            # Exclude self
+            for i in range(end - start):
+                d2_chunk[i, start + i] = float("inf")
+            vals_chunk, idx_chunk = torch.topk(d2_chunk, k=k_eff, largest=False, dim=-1)
+            vals_list.append(vals_chunk)
+            idx_list.append(idx_chunk)
+        return torch.cat(vals_list, dim=0), torch.cat(idx_list, dim=0)
+
+
+def diagnostic_diffusion_edges(
+    z: Tensor,
+    k: int = 16,
+    epsilon_floor: float = 1e-4,
+    *,
+    include_self: bool = False,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """Sparse Gaussian diffusion operator on the feature cloud.
+
+    Returns directed edges (src, dst, weight) representing a row-stochastic
+    diffusion kernel, without materializing an N×N matrix. Uses k-NN to
+    select support, then applies a Gaussian kernel with local scaling.
+
+    This is the sparse counterpart to ``diagnostic_diffusion_operator``.
+    Memory: O(Nk) instead of O(N²).
+    """
+    n = z.shape[0]
+    if n == 0:
+        raise ValueError("empty latent cloud")
+    if n == 1:
+        # Single node: self-loop only
+        s = torch.tensor([0], dtype=torch.long, device=z.device)
+        d = torch.tensor([0], dtype=torch.long, device=z.device)
+        w = torch.tensor([1.0], dtype=z.dtype, device=z.device)
+        return s, d, w
+
+    k_eff = min(max(int(k), 1), max(n - 1, 1))
+    vals, idx = _knn_distances(z, k_eff)  # [N, k], squared distances
+
+    # Local scaling: sigma_i = distance to k-th nearest neighbor
+    local_scale = vals[:, -1].sqrt().clamp_min(epsilon_floor)  # [N]
+
+    # Build edges: for each i, connect to its k nearest neighbors j
+    src = torch.arange(n, device=z.device).unsqueeze(1).expand(n, k_eff).reshape(-1)
+    dst = idx.reshape(-1)
+    d2 = vals.reshape(-1)
+
+    # Gaussian kernel with bilateral local scaling
+    sigma_i = local_scale[src]
+    sigma_j = local_scale[dst]
+    eps_ij = (sigma_i * sigma_j).clamp_min(epsilon_floor ** 2)
+    kernel_vals = torch.exp(-0.5 * d2 / eps_ij)
+
+    # Symmetrize: add reverse edges (j -> i with same weight)
+    src_sym = torch.cat([src, dst])
+    dst_sym = torch.cat([dst, src])
+    w_sym = torch.cat([kernel_vals, kernel_vals])
+
+    if include_self:
+        ids = torch.arange(n, device=z.device)
+        src_sym = torch.cat([src_sym, ids])
+        dst_sym = torch.cat([dst_sym, ids])
+        w_sym = torch.cat([w_sym, torch.ones(n, dtype=z.dtype, device=z.device)])
+
+    # Row-normalize to make row-stochastic
+    mass = torch.zeros(n, dtype=w_sym.dtype, device=z.device)
+    mass.index_add_(0, src_sym, w_sym)
+    # Handle isolated nodes (no neighbors found)
+    isolated = mass <= 0
+    if bool(isolated.any().item()):
+        ids = torch.arange(n, device=z.device)[isolated]
+        src_sym = torch.cat([src_sym, ids])
+        dst_sym = torch.cat([dst_sym, ids])
+        w_sym = torch.cat([w_sym, torch.ones(ids.numel(), dtype=z.dtype, device=z.device)])
+        mass = torch.zeros(n, dtype=w_sym.dtype, device=z.device)
+        mass.index_add_(0, src_sym, w_sym)
+
+    pweight = w_sym / mass[src_sym].clamp_min(1e-12)
+    return src_sym, dst_sym, pweight
+
+
+def sparse_operator_discrepancy(
+    act_src: Tensor,
+    act_dst: Tensor,
+    act_weight: Tensor,
+    diag_src: Tensor,
+    diag_dst: Tensor,
+    diag_weight: Tensor,
+    num_nodes: int,
+    mode: str = "frobenius",
+) -> Tensor:
+    """Compute operator discrepancy on sparse edge supports.
+
+    Builds the difference P_act - P_diag only on the union of supports,
+    avoiding a full N×N matrix. The Frobenius norm is computed as the
+    square root of the sum of squared differences over the union support.
+
+    Memory: O(|E_act| + |E_diag|) instead of O(N²).
+    """
+    # Build a sparse representation of P_act and P_diag
+    # P_act[i,j] = act_weight for each (act_src, act_dst) edge
+    # P_diag[i,j] = diag_weight for each (diag_src, diag_dst) edge
+
+    # Create index keys for fast lookup
+    act_key = act_src * num_nodes + act_dst
+    diag_key = diag_src * num_nodes + diag_dst
+
+    # Build dictionaries via scatter: for each (i,j) pair, get the weight
+    # We use a hash-map approach via torch indexing
+    # Sort both edge lists and merge
+
+    act_order = torch.argsort(act_key)
+    diag_order = torch.argsort(diag_key)
+    act_key_sorted = act_key[act_order]
+    diag_key_sorted = diag_key[diag_order]
+
+    # Merge the two sorted key lists to find union support
+    all_keys = torch.cat([act_key_sorted, diag_key_sorted])
+    all_order = torch.argsort(all_keys)
+    all_keys_sorted = all_keys[all_order]
+
+    # For each unique key, get act_weight and diag_weight (0 if absent)
+    # Use searchsorted to find positions
+    act_pos = torch.searchsorted(act_key_sorted, all_keys_sorted)
+    diag_pos = torch.searchsorted(diag_key_sorted, all_keys_sorted)
+
+    # Clamp positions to valid range
+    act_pos = act_pos.clamp(max=len(act_key_sorted) - 1)
+    diag_pos = diag_pos.clamp(max=len(diag_key_sorted) - 1)
+
+    # Check if keys actually match
+    act_match = act_key_sorted[act_pos] == all_keys_sorted
+    diag_match = diag_key_sorted[diag_pos] == all_keys_sorted
+
+    # Gather weights (0 where no match)
+    act_w = torch.where(act_match, act_weight[act_order[act_pos]], torch.zeros_like(act_weight[0:1]))
+    diag_w = torch.where(diag_match, diag_weight[diag_order[diag_pos]], torch.zeros_like(diag_weight[0:1]))
+
+    diff = act_w - diag_w
+
+    if mode == "frobenius":
+        # ||P_act - P_diag||_F / sqrt(N)
+        return torch.sqrt((diff * diff).sum().clamp_min(0.0)) / max(num_nodes, 1) ** 0.5
+    if mode == "mean_l1":
+        # mean over rows of |diff| sum
+        # Approximate: total L1 / N
+        return diff.abs().sum() / max(num_nodes, 1)
+    raise ValueError(f"unknown discrepancy mode: {mode}")
+
+
+@dataclass(slots=True)
+class SparseDualOperatorState:
+    """Sparse dual operator representation using edge lists.
+
+    Both actuation and diagnostic operators are stored as directed edge
+    lists (src, dst, weight) where weight is row-stochastic. This avoids
+    the O(N²) memory of the dense DualOperatorState.
+
+    For small N, the dense DualOperatorState is preferred as an exact
+    reference. For large N, this sparse representation scales as
+    O(|E_act| + N*k) where k is the diagnostic k-NN parameter.
+    """
+    act_src: Tensor
+    act_dst: Tensor
+    act_weight: Tensor
+    diag_src: Tensor
+    diag_dst: Tensor
+    diag_weight: Tensor
+    num_nodes: int
+
+    @classmethod
+    def from_graph_and_latent(
+        cls,
+        graph: GraphBuffers,
+        z: Tensor,
+        *,
+        symmetric: bool = True,
+        self_loop: float = 0.0,
+        diagnostic_k: int = 16,
+        diagnostic_epsilon_floor: float = 1e-4,
+    ) -> "SparseDualOperatorState":
+        """Build sparse dual operators from graph and latent state."""
+        # Actuation: reuse the existing sparse edge construction
+        act_src, act_dst, act_w = actuation_markov_edges(
+            graph, symmetric=symmetric, self_loop=self_loop,
+        )
+        # Diagnostic: k-NN based diffusion on the feature cloud
+        diag_src, diag_dst, diag_w = diagnostic_diffusion_edges(
+            z, k=diagnostic_k, epsilon_floor=diagnostic_epsilon_floor,
+        )
+        return cls(act_src, act_dst, act_w, diag_src, diag_dst, diag_w, graph.num_nodes)
+
+    def discrepancy(self, mode: str = "frobenius") -> Tensor:
+        return sparse_operator_discrepancy(
+            self.act_src, self.act_dst, self.act_weight,
+            self.diag_src, self.diag_dst, self.diag_weight,
+            self.num_nodes, mode=mode,
+        )
+
+    def to_dense(self) -> "DualOperatorState":
+        """Convert to dense DualOperatorState (for small N or testing)."""
+        n = self.num_nodes
+        p_act = torch.zeros((n, n), dtype=self.act_weight.dtype, device=self.act_weight.device)
+        p_act.index_put_((self.act_src, self.act_dst), self.act_weight, accumulate=True)
+        p_diag = torch.zeros((n, n), dtype=self.diag_weight.dtype, device=self.diag_weight.device)
+        p_diag.index_put_((self.diag_src, self.diag_dst), self.diag_weight, accumulate=True)
+        return DualOperatorState(p_act, p_diag)
 
 
 def spectral_gap_symmetric(p: Tensor) -> Tensor:

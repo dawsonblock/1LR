@@ -2,7 +2,7 @@
 from .config import LGAEConfig, load_config, config_structural_hash, config_governance_hash
 from .evolution import LGAEEngine
 from .fibers import FixedWidthFiberLatent, FiberController, SOConnectionBank, project_to_so_d
-from .operators import DualOperatorState
+from .operators import DualOperatorState, SparseDualOperatorState
 from .types import (
     EdgeRole,
     GraphBuffers,
@@ -21,7 +21,7 @@ from .mutations import RicciFlowReweight, MutationCooldownTracker
 __all__ = [
     "LGAEConfig", "load_config", "config_structural_hash", "config_governance_hash",
     "LGAEEngine", "FixedWidthFiberLatent", "FiberController", "SOConnectionBank", "project_to_so_d",
-    "DualOperatorState", "EdgeRole", "GraphBuffers", "make_graph_buffers", "make_bucketed_graph_buffers", "round_edge_capacity",
+    "DualOperatorState", "SparseDualOperatorState", "EdgeRole", "GraphBuffers", "make_graph_buffers", "make_bucketed_graph_buffers", "round_edge_capacity",
     "MutationDecision", "MutationResult", "RicciFlowReweight", "MutationCooldownTracker", "LGAETrainCore", "train_step", "padded_markov_edges", "refresh_padded_markov_edges_", "padded_markov_edges_with_slots", "refresh_padded_markov_edges_with_slots_",
 ]
 __version__ = "3.3.0"

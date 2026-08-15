@@ -1,13 +1,13 @@
 <div align="center">
 
-# LGAE-v3.3 / 1LR: Governed Adaptive Geometry Engine
+# LGAE-v4.0 / 1LR: Governed Adaptive Geometry Engine
 
 **A Multi-Timescale Geometric Controller for Self-Evolving Graph and Fiber-Bundle Latent Spaces**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.6+](https://img.shields.io/badge/PyTorch-2.6+-ee4c2c.svg)](https://pytorch.org/)
 [![CI Status](https://github.com/dawsonblock/1LR/actions/workflows/ci.yml/badge.svg)](https://github.com/dawsonblock/1LR/actions)
-[![Tests](https://img.shields.io/badge/tests-93%2F93%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-112%2F112%20passing-brightgreen.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Gauge: SO(d)](https://img.shields.io/badge/gauge-SO(d)%20Invariance-purple.svg)]()
 
@@ -17,7 +17,14 @@
 
 ## Overview
 
-**LGAE-v3.3 (`1LR`)** is a hardened geometric deep learning engine and dynamical controller. It operates over graph-structured data and continuous fiber bundles, combining continuous field diffusion, Lie-algebra gauge connections, discrete Ricci-flow surgery, and multi-operator curvature diagnostics.
+**LGAE-v4.0 (`1LR`)** is a hardened geometric deep learning engine and dynamical controller. It operates over graph-structured data and continuous fiber bundles, combining continuous field diffusion, Lie-algebra gauge connections, discrete Ricci-flow surgery, and multi-operator curvature diagnostics.
+
+### v4.0 — Sparse Weighted Geometry
+
+This release closes the scalability and weighted-geometry gaps identified in the v3.3 audit:
+
+- **Sparse dual operators**: `SparseDualOperatorState` replaces the dense `N×N` actuation and diagnostic diffusion operators with `O(Nk)` edge-list representations. The diagnostic diffusion uses k-NN without materializing the full pairwise distance matrix. Operator discrepancy is computed on the union of supports.
+- **Weighted curvature backends**: `curvature_weight_mode='weighted'` is now supported. Weighted Ollivier uses edge-weight-proportional lazy measures and Dijkstra shortest-path costs. Weighted LLY uses the weighted normalized Laplacian with shortest-path-distance boundary conditions. Weighted AF3 uses weighted degree instead of unweighted degree.
 
 ### v3.3 — Authority and Persistence Hardening
 
@@ -310,7 +317,7 @@ python scripts/generate_manifest.py --check   # verify manifest
 │   ├── operators.py          # Actuation & diagnostic Markov operators
 │   ├── receipts.py           # Cryptographic receipt logging
 │   └── topology.py           # NetworkX conversion, Betti numbers & PH
-└── tests/                    # 17 test modules with 93 verified unit/regression tests
+└── tests/                    # 18 test modules with 112 verified unit/regression tests
 ```
 
 ---
