@@ -334,25 +334,30 @@ def sparse_operator_discrepancy(
 
     Memory: O(|E_act| + |E_diag|) instead of O(N²).
     """
+    import warnings
+
     # Build coalesced sparse tensors for both operators
     act_indices = torch.stack([act_src.to(torch.long), act_dst.to(torch.long)], dim=0)
     diag_indices = torch.stack([diag_src.to(torch.long), diag_dst.to(torch.long)], dim=0)
 
-    P_act_sp = torch.sparse_coo_tensor(
-        act_indices, act_weight, size=(num_nodes, num_nodes),
-    ).coalesce()
+    with warnings.catch_warnings():
+        # Suppress sparse invariant check warning on older PyTorch versions
+        warnings.filterwarnings("ignore", message="Sparse invariant checks", category=UserWarning)
+        P_act_sp = torch.sparse_coo_tensor(
+            act_indices, act_weight, size=(num_nodes, num_nodes),
+        ).coalesce()
 
-    P_diag_sp = torch.sparse_coo_tensor(
-        diag_indices, diag_weight, size=(num_nodes, num_nodes),
-    ).coalesce()
+        P_diag_sp = torch.sparse_coo_tensor(
+            diag_indices, diag_weight, size=(num_nodes, num_nodes),
+        ).coalesce()
 
-    # Build the difference by concatenating indices and values
-    # P_act - P_diag: act entries get +weight, diag entries get -weight
-    diff_indices = torch.cat([P_act_sp.indices(), P_diag_sp.indices()], dim=1)
-    diff_values = torch.cat([P_act_sp.values(), -P_diag_sp.values()])
-    delta = torch.sparse_coo_tensor(
-        diff_indices, diff_values, size=(num_nodes, num_nodes),
-    ).coalesce()
+        # Build the difference by concatenating indices and values
+        # P_act - P_diag: act entries get +weight, diag entries get -weight
+        diff_indices = torch.cat([P_act_sp.indices(), P_diag_sp.indices()], dim=1)
+        diff_values = torch.cat([P_act_sp.values(), -P_diag_sp.values()])
+        delta = torch.sparse_coo_tensor(
+            diff_indices, diff_values, size=(num_nodes, num_nodes),
+        ).coalesce()
 
     if mode == "frobenius":
         # ||P_act - P_diag||_F / sqrt(N)
