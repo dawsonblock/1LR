@@ -14,6 +14,23 @@ class GraphMutation(Protocol):
     def apply(self, graph: GraphBuffers) -> dict: ...
 
 
+class StructuralMutation(Protocol):
+    """v4.1.3: Protocol for mutations that change structural state.
+
+    Both graph and fiber mutations implement this protocol, allowing
+    the governor to apply the same multi-horizon certification to both.
+
+    Implementations:
+    - AddEdge, PruneEdge, ReweightAffinity, ReweightLength, CoupledReweight
+    - FiberBirth, FiberDeath (future)
+    """
+    name: str
+    def apply(self, graph: GraphBuffers) -> dict: ...
+    def touched_region(self) -> set[int]:
+        """Return the set of node indices touched by this mutation."""
+        ...
+
+
 def canonical_edge(u: int, v: int) -> tuple[int, int]:
     return (min(int(u), int(v)), max(int(u), int(v)))
 
@@ -83,6 +100,9 @@ class AddEdge:
         gen = int(graph.slot_generation[i].item()) if graph.slot_generation is not None else 0
         return {"slot": i, "slot_generation": gen, "reweighted_existing": False, "role": role_code, "affected_edges": [canonical_edge(self.u, self.v)]}
 
+    def touched_region(self) -> set[int]:
+        return {int(self.u), int(self.v)}
+
 
 @dataclass(slots=True)
 class ReweightEdge:
@@ -113,6 +133,9 @@ class ReweightEdge:
         graph.bump_version()
         graph.validate()
         return {"slot": i, "new_weight": float(graph.weight[i].item()), "affected_edges": [canonical_edge(self.u, self.v)]}
+
+    def touched_region(self) -> set[int]:
+        return {int(self.u), int(self.v)}
 
 
 @dataclass(slots=True)
@@ -147,6 +170,9 @@ class ReweightAffinity:
         graph.validate()
         return {"slot": i, "new_weight": float(graph.weight[i].item()), "field": "affinity", "affected_edges": [canonical_edge(self.u, self.v)]}
 
+    def touched_region(self) -> set[int]:
+        return {int(self.u), int(self.v)}
+
 
 @dataclass(slots=True)
 class ReweightLength:
@@ -180,6 +206,9 @@ class ReweightLength:
         graph.bump_version()
         graph.validate()
         return {"slot": i, "new_length": float(graph.length[i].item()), "field": "length", "affected_edges": [canonical_edge(self.u, self.v)]}
+
+    def touched_region(self) -> set[int]:
+        return {int(self.u), int(self.v)}
 
 
 @dataclass(slots=True)
@@ -236,6 +265,9 @@ class CoupledReweight:
             "coupling": self.coupling,
             "affected_edges": [canonical_edge(self.u, self.v)],
         }
+
+    def touched_region(self) -> set[int]:
+        return {int(self.u), int(self.v)}
 
 
 @dataclass(slots=True)
@@ -331,6 +363,14 @@ class RicciFlowReweight:
             graph.bump_version()
             graph.validate()
         return {"slots": slots, "affected_edges": changed, "updated_edges": len(changed)}
+
+    def touched_region(self) -> set[int]:
+        """Return all endpoints touched by this Ricci flow update."""
+        region: set[int] = set()
+        for (u, v) in self.curvatures:
+            region.add(int(u))
+            region.add(int(v))
+        return region
 
 
 def affected_edges(mutation: Any) -> list[tuple[int, int]]:

@@ -63,6 +63,7 @@ class GeometryGovernor:
 
     def __init__(self, cfg: LGAEConfig) -> None:
         self.cfg = cfg
+        self._current_touched_nodes: list[int] | None = None
 
     def operators(self, graph: GraphBuffers, z: Tensor) -> "DualOperatorState | SparseDualOperatorState":
         """Build dual operators.
@@ -249,10 +250,26 @@ class GeometryGovernor:
         details["entropic"] = ent_values
         details["entropic_status"] = {i: r.status for i, r in ent_detail.items()}
 
+        # v4.1.3: Explicit analytic vertex selection policy.
+        # Select critical vertices as the union of:
+        #   - highest transport pressure (gamma)
+        #   - lowest LLY curvature (most negative)
+        #   - highest operator discrepancy contribution
+        #   - mutation-touched nodes (passed via seed metadata)
+        # This replaces the old `order[:bakry_nodes]` heuristic.
+        analytic_vertices = self._select_analytic_vertices(
+            graph, z, fast, lly, ops, order,
+        )
+        max_analytic = max(
+            int(self.cfg.audit.bakry_nodes), int(self.cfg.audit.cde_nodes),
+        )
+        analytic_vertices = analytic_vertices[:max(max_analytic, len(analytic_vertices))]
+        details["analytic_vertices"] = analytic_vertices.tolist() if hasattr(analytic_vertices, 'tolist') else list(analytic_vertices)
+        be_nodes = analytic_vertices[: min(self.cfg.audit.bakry_nodes, len(analytic_vertices))].tolist()
+        cde_nodes = analytic_vertices[: min(self.cfg.audit.cde_nodes, len(analytic_vertices))].tolist()
+
         # Bakry–Émery and CDE: use local dense extraction for sparse operators
         # to avoid O(N²) allocation. For dense operators, use the full matrix.
-        be_nodes = order[: min(self.cfg.audit.bakry_nodes, len(order))]
-        cde_nodes = order[: min(self.cfg.audit.cde_nodes, len(order))]
         if isinstance(ops, SparseDualOperatorState):
             # Local BE/CDE: extract 2-hop neighborhoods for selected nodes
             all_audit_nodes = torch.tensor(
@@ -260,7 +277,7 @@ class GeometryGovernor:
                 dtype=torch.long, device=z.device,
             ) if (be_nodes or cde_nodes) else torch.tensor([], dtype=torch.long, device=z.device)
             if all_audit_nodes.numel() > 0:
-                local_P, node_idx = ops.local_dense_diagnostic(all_audit_nodes, radius=2)
+                local_P, node_idx = ops.local_dense_diagnostic(all_audit_nodes, radius=1, max_local_nodes=256)
                 if local_P.numel() > 0:
                     Q, stationary_measure = normalized_markov_generator(local_P.to(torch.float64))
                     details["bakry_stationary_measure_min"] = float(stationary_measure.min().item())
@@ -448,6 +465,83 @@ class GeometryGovernor:
         }
         return MutationResult(decision, reasons, before=before, after=after, metadata=meta)
 
+    def _select_analytic_vertices(
+        self,
+        graph: GraphBuffers,
+        z: Tensor,
+        fast: "FastSignals",
+        lly: dict[tuple[int, int], float],
+        ops,
+        order: list[int],
+    ) -> Tensor:
+        """Select critical vertices for local BE/CDE analysis.
+
+        v4.1.3: Union of:
+        - highest transport pressure (top gamma)
+        - lowest LLY curvature (most negative)
+        - highest operator discrepancy contribution
+        - mutation-touched nodes (if available in graph metadata)
+
+        Returns a deduplicated, ordered tensor of vertex indices.
+        """
+        N = graph.num_nodes
+        max_count = max(
+            int(self.cfg.audit.bakry_nodes) + int(self.cfg.audit.cde_nodes),
+            20,
+        )
+        selected: set[int] = set()
+
+        # 1. Highest transport pressure
+        for i in order[:max_count]:
+            selected.add(int(i))
+            if len(selected) >= max_count:
+                break
+
+        # 2. Lowest LLY curvature (most negative edges → their endpoints)
+        if lly:
+            sorted_lly = sorted(lly.items(), key=lambda x: x[1])
+            for (u, v), _ in sorted_lly[:max_count]:
+                selected.add(int(u))
+                selected.add(int(v))
+                if len(selected) >= max_count * 2:
+                    break
+
+        # 3. Highest operator discrepancy contribution
+        # Use the per-node discrepancy from the sparse/dense operator
+        if isinstance(ops, SparseDualOperatorState):
+            # For sparse: use per-node edge count difference as a cheap proxy
+            # for discrepancy contribution. Full per-row L1 is O(n²) per node
+            # and too expensive for large N.
+            from collections import Counter
+            act_out_deg = Counter(ops.act_src.tolist())
+            diag_out_deg = Counter(ops.diag_src.tolist())
+            all_nodes_set = set(act_out_deg.keys()) | set(diag_out_deg.keys())
+            disc_proxy = [(abs(act_out_deg.get(i, 0) - diag_out_deg.get(i, 0)), i) for i in all_nodes_set]
+            disc_proxy.sort(reverse=True)
+            for _, i in disc_proxy[:max_count]:
+                selected.add(int(i))
+                if len(selected) >= max_count * 3:
+                    break
+        else:
+            # Dense: per-row L1 discrepancy
+            try:
+                diff = (ops.p_actuation - ops.p_diagnostic).abs().sum(dim=1)
+                disc_order = torch.argsort(diff, descending=True).tolist()
+                for i in disc_order[:max_count]:
+                    selected.add(int(i))
+                    if len(selected) >= max_count * 3:
+                        break
+            except Exception:
+                pass
+
+        # 4. Mutation-touched nodes (set by evaluate_mutation before calling audit)
+        touched = getattr(self, '_current_touched_nodes', None)
+        if touched is not None:
+            for i in touched:
+                selected.add(int(i))
+
+        return torch.tensor(sorted(selected), dtype=torch.long, device=z.device)
+
     def _local_mutation_gate(self, graph: GraphBuffers, mutation) -> tuple[bool, str | None]:
         """Cheap sub-complex gate before expensive global audits."""
         if not self.cfg.audit.local_disconnect_gate:
@@ -472,7 +566,17 @@ class GeometryGovernor:
                 MutationDecision.REJECT, reasons,
                 metadata={"mutation": getattr(mutation, "name", type(mutation).__name__), "local_gate": True},
             ), graph.clone()
+        # v4.1.3: Pass mutation-touched nodes to audit for analytic vertex selection
+        touched = set()
+        for attr in ("u", "v"):
+            if hasattr(mutation, attr):
+                touched.add(int(getattr(mutation, attr)))
+        if hasattr(mutation, "curvatures"):
+            for (u, v) in mutation.curvatures:
+                touched.add(int(u)); touched.add(int(v))
+        self._current_touched_nodes = list(touched)
         before = self.audit(graph, z, seed=seed)
+        self._current_touched_nodes = None
         shadow = graph.clone()
         try:
             metadata = mutation.apply(shadow)

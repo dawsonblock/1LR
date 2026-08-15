@@ -444,37 +444,48 @@ class SparseDualOperatorState:
         """
         return self.to_dense().p_actuation
 
-    def local_dense_diagnostic(self, center_nodes: Tensor, radius: int = 2) -> tuple[Tensor, Tensor]:
+    def local_dense_diagnostic(self, center_nodes: Tensor, radius: int = 1, max_local_nodes: int = 256) -> tuple[Tensor, Tensor]:
         """Extract a local dense diagnostic operator for selected center nodes.
 
-        For each center node, extracts the 2-hop neighborhood from the sparse
-        diagnostic graph and materializes only that local submatrix. This is
-        the key scaling mechanism: BE/CDE complexity depends on local degree,
-        not global N.
+        For each center node, extracts the ``radius``-hop neighborhood from the
+        sparse diagnostic graph and materializes only that local submatrix.
+        The neighborhood is capped at ``max_local_nodes`` to prevent the local
+        matrix from growing to O(N) on dense k-NN graphs.
 
         Returns (local_P, node_indices) where:
-        - local_P is a block-diagonal-ish dense matrix over the union of neighborhoods
+        - local_P is a dense row-stochastic matrix over the union of neighborhoods
         - node_indices is the mapping from local indices to global node IDs
         """
         device = self.diag_src.device
         dtype = self.diag_weight.dtype
 
         # Build adjacency sets from sparse diagnostic edges
-        nbrs: dict[int, set[int]] = {i: set() for i in range(self.num_nodes)}
+        nbrs: dict[int, set[int]] = {}
         for s, d in zip(self.diag_src.tolist(), self.diag_dst.tolist()):
-            nbrs[s].add(d)
+            nbrs.setdefault(s, set()).add(d)
 
-        # BFS to radius hops from each center node
+        # BFS to radius hops from each center node, with cap
         selected: set[int] = set()
         for c in center_nodes.tolist():
+            if len(selected) >= max_local_nodes:
+                break
             frontier = {int(c)}
             for _ in range(radius):
+                if len(selected) >= max_local_nodes:
+                    break
                 next_frontier: set[int] = set()
                 for node in frontier:
-                    next_frontier.update(nbrs.get(node, set()))
+                    for nbr in nbrs.get(node, ()):
+                        if len(selected) + len(next_frontier) >= max_local_nodes:
+                            break
+                        next_frontier.add(nbr)
+                    if len(selected) + len(next_frontier) >= max_local_nodes:
+                        break
                 selected.update(frontier)
                 frontier = next_frontier
             selected.update(frontier)
+            if len(selected) > max_local_nodes:
+                selected = set(sorted(selected)[:max_local_nodes])
 
         sorted_nodes = sorted(selected)
         idx_map = {g: i for i, g in enumerate(sorted_nodes)}
@@ -482,9 +493,13 @@ class SparseDualOperatorState:
         if n_local == 0:
             return torch.zeros((0, 0), dtype=dtype, device=device), torch.tensor([], dtype=torch.long, device=device)
 
-        # Build local dense matrix from sparse edges
+        # Build local dense matrix from sparse edges (vectorized)
         local_P = torch.zeros((n_local, n_local), dtype=dtype, device=device)
-        for s, d, w in zip(self.diag_src.tolist(), self.diag_dst.tolist(), self.diag_weight.tolist()):
+        # Filter sparse edges to those within the local neighborhood
+        src_list = self.diag_src.tolist()
+        dst_list = self.diag_dst.tolist()
+        w_list = self.diag_weight.tolist()
+        for s, d, w in zip(src_list, dst_list, w_list):
             if s in idx_map and d in idx_map:
                 local_P[idx_map[s], idx_map[d]] += w
 

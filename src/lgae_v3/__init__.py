@@ -19,7 +19,12 @@ from .training import (
 from .mutations import (
     AddEdge, ReweightEdge, ReweightAffinity, ReweightLength, CoupledReweight,
     PruneEdge, RicciFlowReweight, MutationCooldownTracker,
+    StructuralMutation, GraphMutation,
     mutation_to_spec, mutation_from_spec,
+)
+from .neighbor_index import (
+    NeighborIndex, ExactChunkedKNN, KNNGraphResult,
+    build_knn_graph, recall_at_k,
 )
 
 __all__ = [

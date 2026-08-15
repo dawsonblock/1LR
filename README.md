@@ -1,13 +1,13 @@
 <div align="center">
 
-# LGAE-v4.1.2 / 1LR: Governed Adaptive Geometry Engine
+# LGAE-v4.1.3 / 1LR: Governed Adaptive Geometry Engine
 
 **A Multi-Timescale Geometric Controller for Self-Evolving Graph and Fiber-Bundle Latent Spaces**
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.6+](https://img.shields.io/badge/PyTorch-2.6+-ee4c2c.svg)](https://pytorch.org/)
 [![CI Status](https://github.com/dawsonblock/1LR/actions/workflows/ci.yml/badge.svg)](https://github.com/dawsonblock/1LR/actions)
-[![Tests](https://img.shields.io/badge/tests-227%2F227%20passing-brightgreen.svg)]()
+[![Tests](https://img.shields.io/badge/tests-357%2F357%20passing-brightgreen.svg)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Gauge: SO(d)](https://img.shields.io/badge/gauge-SO(d)%20Invariance-purple.svg)]()
 
@@ -18,6 +18,20 @@
 ## Overview
 
 **LGAE-v4.1 (`1LR`)** is a hardened geometric deep learning engine and dynamical controller. It operates over graph-structured data and continuous fiber bundles, combining continuous field diffusion, Lie-algebra gauge connections, discrete Ricci-flow surgery, and multi-operator curvature diagnostics.
+
+### v4.1.3 — Deep Audit: Sparse Scaling, Float64 Discrepancy, ANN Index
+
+- **Analytic vertex selection policy**: BE/CDE vertices now selected as union of highest transport pressure, lowest LLY, highest operator discrepancy, and mutation-touched nodes. Replaces the old `order[:bakry_nodes]` heuristic.
+- **Local neighborhood cap**: `local_dense_diagnostic` now caps at `max_local_nodes=256` with `radius=1` to prevent O(N) local matrices on dense k-NN graphs. N=2500 audit drops from 73s to 3.2s.
+- **Float64 discrepancy validation**: Sparse discrepancy verified against dense reference to 1e-10 tolerance in float64 across 16 parameterized cases.
+- **Deliberate duplicate edge tests**: COO coalescing verified with deliberately duplicated edges in both operators.
+- **v4 checkpoint length mandatory**: Safe checkpoints now require `length` tensor for v4+ state. Legacy migration path infers `ℓ=1/a` only for schema < 4.
+- **Stale quarantine detection**: Quarantine entries persist `base_graph_hash`; after restart, acceptance checks `H(G_current) == H(G_base)` and rejects stale quarantines.
+- **Parameterized governance hash**: Every decision-affecting config field tested for hash sensitivity (90+ parameterized cases).
+- **StructuralMutation protocol**: All mutation classes implement `touched_region()` returning affected node indices. Enables unified multi-horizon certification for graph and fiber mutations.
+- **Neighbor index abstraction**: `NeighborIndex` protocol with `ExactChunkedKNN` reference backend. `build_knn_graph()` and `recall_at_k()` for ANN backend validation. Pluggable architecture for future HNSW/FAISS backends.
+- **Forman reference tests**: K2, weighted path, weighted star, uniform reduction, and tree curvature verified against analytic formulas.
+- **Multi-horizon decision combinations**: All 9 decision aggregation patterns tested (AAA→A, AAQ→Q, AQA→Q, QQA→Q, AAR→R, QRA→R, RRR→R, early REJECT, QUARANTINE+REJECT).
 
 ### v4.1.2 — Geometry-Mode Tiers, Mutation Split, PH Bottleneck
 
@@ -351,7 +365,7 @@ python scripts/generate_manifest.py --check   # verify manifest
 │   ├── operators.py          # Actuation & diagnostic Markov operators
 │   ├── receipts.py           # Cryptographic receipt logging
 │   └── topology.py           # NetworkX conversion, Betti numbers & PH
-└── tests/                    # 22 test modules with 227 verified unit/regression tests
+└── tests/                    # 24 test modules with 357 verified unit/regression tests
 ```
 
 ---
