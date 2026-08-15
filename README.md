@@ -413,7 +413,7 @@ python scripts/generate_manifest.py --check   # verify manifest
 │   ├── operators.py          # Actuation & diagnostic Markov operators
 │   ├── receipts.py           # Cryptographic receipt logging
 │   └── topology.py           # NetworkX conversion, Betti numbers & PH
-└── tests/                    # 27 test modules with 492 verified unit/regression tests
+└── tests/                    # 27 test modules with 512 verified unit/regression tests
 ```
 
 ---

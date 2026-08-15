@@ -29,7 +29,8 @@ from .counterfactual import StructuralCounterfactualEngine, CounterfactualResult
 from .uncertainty import EnsembleUncertainty, ConformalCalibrator, uncertainty_gated_decision
 from .credit import MutationCreditTracker, MutationReceipt
 from .consolidation import StabilityPlasticityController, FiberLifecycleStage
-from .types import GraphBuffers
+from .action_bridge import certify_action_through_governor, ActionBridgeResult
+from .types import GraphBuffers, MutationDecision
 from .config import LGAEConfig, config_governance_hash
 from .version import VERSION
 
@@ -66,6 +67,8 @@ class StructuralLearningLoop:
         config: LGAEConfig | None = None,
         # Executive hyperparameters
         executive: StructuralExecutive | None = None,
+        # Governor (authoritative certification)
+        governor: Any | None = None,
         # Uncertainty
         ensemble_size: int = 5,
         beta: float = 1.0,
@@ -81,6 +84,7 @@ class StructuralLearningLoop:
         no_op_penalty: float = 0.0,
     ):
         self.config = config or LGAEConfig()
+        self.governor = governor
         self.executive = executive or StructuralExecutive(self.config)
         self.uncertainty_estimator = EnsembleUncertainty(
             self.executive, ensemble_size=ensemble_size, beta=beta,
@@ -151,9 +155,21 @@ class StructuralLearningLoop:
             unc_estimate,
         )
 
-        # 4. CERTIFY: The governor certifies (simulated here)
-        # In full integration, this calls governor.evaluate_mutation
-        governance_decision = "accept" if uncertainty_decision == "accept" else "quarantine"
+        # 4. CERTIFY: The governor certifies
+        bridge_result: ActionBridgeResult | None = None
+        if self.governor is not None and chosen_action != StructuralAction.NO_OP:
+            # Use the real governor for authoritative certification
+            bridge_result = certify_action_through_governor(
+                chosen_action, graph, z, self.governor,
+            )
+            if bridge_result.governor_result is not None:
+                decision = bridge_result.governor_result.decision
+                governance_decision = decision.value  # "accept", "quarantine", "reject"
+            else:
+                governance_decision = "reject"
+        else:
+            # No governor: use uncertainty gate as fallback
+            governance_decision = "accept" if uncertainty_decision == "accept" else "quarantine"
 
         # 5. EXECUTE: Only if both uncertainty and governance agree
         executed = (
@@ -182,13 +198,20 @@ class StructuralLearningLoop:
                     step=step,
                 )
 
+            # If governor provided a shadow graph from certification,
+            # use it as the post-mutation state for utility measurement.
+            if bridge_result is not None and bridge_result.shadow_graph is not None:
+                post_graph = bridge_result.shadow_graph
+            else:
+                post_graph = graph
+
             # Measure after execution (if utility_fn provided)
             if utility_fn is not None:
-                u_after = utility_fn(graph, z)
+                u_after = utility_fn(post_graph, z)
             delta_u = u_after - u_before
 
             # Record graph hash after execution
-            hash_after = graph.state_hash()
+            hash_after = post_graph.state_hash()
 
             # Record in credit tracker
             self.credit_tracker.record_mutation(

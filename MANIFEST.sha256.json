@@ -5,7 +5,7 @@
     ".gitignore",
     "MANIFEST.sha256.json"
   ],
-  "file_count": 97,
+  "file_count": 99,
   "files": [
     {
       "path": ".github/workflows/ci.yml",
@@ -15,7 +15,7 @@
     {
       "path": "BUILD_REPORT.md",
       "bytes": 10557,
-      "sha256": "30f92eea5d6215dd41caa869f9fc20ae397e8b90ae09a95306f8ee7a4cb808fc"
+      "sha256": "f9455e26dfb8f8e719e7bb69f3dd6a9854147ad46937cfcd8e732d497a7de603"
     },
     {
       "path": "LICENSE",
@@ -25,7 +25,7 @@
     {
       "path": "README.md",
       "bytes": 27457,
-      "sha256": "015375e7498955ed0104b797d58eae216b42edd01a3e89e604260fb5b6fc848a"
+      "sha256": "1a2f9be4daa04ad57819b7676f79b341f56eca6c4be86e6a95bad48f7395bd51"
     },
     {
       "path": "configs/default.yaml",
@@ -80,7 +80,7 @@
     {
       "path": "release_verification.json",
       "bytes": 1066,
-      "sha256": "fa321fa06758b01cc1c1c800c49f35b862fbe7128ed028e01c5f8f21cf5db328"
+      "sha256": "c325b89dfe49c60b8a8e8a9aa00fe2e8d939ed59650ded71911f128388c9cecc"
     },
     {
       "path": "requirements-verified.txt",
@@ -114,8 +114,13 @@
     },
     {
       "path": "src/lgae_v3/__init__.py",
-      "bytes": 3291,
-      "sha256": "ef3c969451672967e84bc126e937619c552a25fc4c5e40379cb9f524e4bea06d"
+      "bytes": 3438,
+      "sha256": "04a973f237700e5b75264e6241b28b773c2f2496be0c34728617cf77c55ed44e"
+    },
+    {
+      "path": "src/lgae_v3/action_bridge.py",
+      "bytes": 7027,
+      "sha256": "a29824a4017f647e836740f72e921cb72eea23f4e6e287b0ec901a5f44ec97ed"
     },
     {
       "path": "src/lgae_v3/ann_index.py",
@@ -304,8 +309,8 @@
     },
     {
       "path": "src/lgae_v3/structural_loop.py",
-      "bytes": 9809,
-      "sha256": "eb295e4c31ef963ef4f5639c3c1e430eb0eef1a9c241d54d86b3ecc6e4b9d699"
+      "bytes": 10980,
+      "sha256": "0d4080f027ce1f0ad720f81729058f8dc072ccfd379589c94d0e47adaa4c687e"
     },
     {
       "path": "src/lgae_v3/timescales.py",
@@ -486,6 +491,11 @@
       "path": "tests/test_v50_structural_learning.py",
       "bytes": 21473,
       "sha256": "f40959be864bd080c34925464e8c0100b5f6f3aacd34495b1fd9a2144eba18e1"
+    },
+    {
+      "path": "tests/test_v51_integration.py",
+      "bytes": 14389,
+      "sha256": "8ba55fd330e9230843439ecb352d413de5c558c2c2ba2d320ad106595794c535"
     },
     {
       "path": "tests/test_v51_modules.py",

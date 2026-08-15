@@ -88,8 +88,8 @@ Base: `lgae_v3_merged_hardened` v3.1.0.
 
 ## Qualification
 
-- Pytest collection: **492 tests**.
-- Full test suite: **492/492 passed**.
+- Pytest collection: **512 tests**.
+- Full test suite: **512/512 passed**.
 - `scripts/qualify.py`: **PASS**.
 - Editable install with `--no-build-isolation`: **PASS**.
 - Installed CLI version/import check: **PASS** (`5.1.0`).

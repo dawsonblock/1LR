@@ -16,6 +16,7 @@ from .training import (
     LGAETrainCore, train_step, padded_markov_edges, refresh_padded_markov_edges_,
     padded_markov_edges_with_slots, refresh_padded_markov_edges_with_slots_,
 )
+from .governor import GeometryGovernor
 from .mutations import (
     AddEdge, ReweightEdge, ReweightAffinity, ReweightLength, CoupledReweight,
     PruneEdge, RicciFlowReweight, MutationCooldownTracker,
@@ -45,6 +46,9 @@ from .counterfactual import (
 )
 from .structural_loop import (
     StructuralLearningLoop, StructuralLoopResult,
+)
+from .action_bridge import (
+    action_to_mutation, certify_action_through_governor, ActionBridgeResult,
 )
 from .dynamic_gauge import (
     DynamicGaugeNetwork, DynamicGaugeBank, StaticGaugeAdapter,
