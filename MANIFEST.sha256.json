@@ -224,8 +224,8 @@
     },
     {
       "path": "src/lgae_v3/operators.py",
-      "bytes": 27377,
-      "sha256": "85146887400486bf9636d702e87b39e1b6844c3cf1277a3aa146997a9b020365"
+      "bytes": 27661,
+      "sha256": "d680d8597e741a0a2d35fdc5ba12fae5f5b0c9981e3efa5ea7b9a647f32c2820"
     },
     {
       "path": "src/lgae_v3/receipts.py",
