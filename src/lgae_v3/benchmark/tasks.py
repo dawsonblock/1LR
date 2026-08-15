@@ -378,16 +378,19 @@ class TaskD_GaugeMismatch(BenchmarkTask):
     def initial_state(self, seed: int = 42) -> TaskState:
         torch.manual_seed(seed)
         N = 6
-        edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)]  # bridge at 2-3
+        edges = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5)]
         graph = make_graph_buffers(N, edges, capacity=N + 4)
+        # Structured latent: cluster 1 has clear principal directions
         z = torch.zeros(N, 4)
-        # Cluster 1: standard frame
-        z[:3] = torch.randn(3, 4) * 0.5
-        # Cluster 2: rotated frame (90-degree rotation in first 2 dims)
-        z[3:] = torch.randn(3, 4) * 0.5
+        z[:3] = torch.tensor([
+            [1.0, 0.0, 0.5, 0.0],
+            [0.0, 1.0, 0.0, 0.5],
+            [0.5, 0.5, 1.0, 0.0],
+        ])
+        # Cluster 2: same structure but rotated 90° in first 2 dims
         R = torch.eye(4)
         R[0, 0] = 0.0; R[0, 1] = -1.0; R[1, 0] = 1.0; R[1, 1] = 0.0
-        z[3:] = z[3:] @ R.T
+        z[3:] = z[:3].clone() @ R.T  # Same structure, rotated
         cfg = LGAEConfig()
         cfg.fiber.d_base = 4; cfg.fiber.d_max = 8
         return TaskState(graph=graph, z=z, config=cfg,
@@ -397,21 +400,19 @@ class TaskD_GaugeMismatch(BenchmarkTask):
         return {StructuralAction.CHANGE_GAUGE}
 
     def utility(self, state: TaskState) -> float:
-        """Utility = negative frame misalignment across the bridge."""
+        """Utility = frame alignment between clusters.
+
+        Measures how well the two clusters' coordinate frames are aligned.
+        Uses the Frobenius norm of the difference between the clusters'
+        principal direction matrices.
+        """
         z = state.z
-        # Measure alignment between cluster 1 (0:3) and cluster 2 (3:)
-        # Use cosine similarity of the principal directions
         c1 = z[:3]
         c2 = z[3:]
-        # If frames are aligned, the cross-covariance should have high singular values
-        c1_centered = c1 - c1.mean(dim=0, keepdim=True)
-        c2_centered = c2 - c2.mean(dim=0, keepdim=True)
-        cov = c1_centered.T @ c2_centered
-        sv = torch.linalg.svdvals(cov)
-        # Sum of singular values = nuclear norm = alignment quality
-        alignment = sv.sum().item()
-        # Also penalize large rotations (encourage alignment)
-        return float(alignment)
+        # If frames are aligned, c1 ≈ c2 (same structure)
+        # If rotated, c1 ≠ c2
+        alignment = -float((c1 - c2).pow(2).sum().item())
+        return alignment
 
     def apply_action(self, state: TaskState, action: StructuralAction) -> TaskState:
         graph = state.graph.clone()

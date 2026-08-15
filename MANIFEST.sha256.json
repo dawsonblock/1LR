@@ -134,8 +134,8 @@
     },
     {
       "path": "src/lgae_v3/benchmark/tasks.py",
-      "bytes": 23140,
-      "sha256": "cd22a698019409b3594808c65a61071eb19cbeafddd798ca702921fa8f602e9c"
+      "bytes": 23001,
+      "sha256": "4b0f9d9502ed0d83470ecddc03794a91a87bffdc00c75be01fa713bceeeb344a"
     },
     {
       "path": "src/lgae_v3/cli.py",
