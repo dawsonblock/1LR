@@ -1,4 +1,4 @@
-# LGAE-v5.0.0 Deep Audit: Sparse Scaling, Float64 Discrepancy, ANN Index Build Report
+# LGAE-v5.1.0 Deep Audit: Sparse Scaling, Float64 Discrepancy, ANN Index Build Report
 
 Build: `5.0.0`
 
@@ -88,8 +88,8 @@ Base: `lgae_v3_merged_hardened` v3.1.0.
 
 ## Qualification
 
-- Pytest collection: **448 tests**.
-- Full test suite: **448/448 passed**.
+- Pytest collection: **492 tests**.
+- Full test suite: **492/492 passed**.
 - `scripts/qualify.py`: **PASS**.
 - Editable install with `--no-build-isolation`: **PASS**.
 - Installed CLI version/import check: **PASS** (`5.0.0`).

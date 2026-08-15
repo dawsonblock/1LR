@@ -1,11 +1,11 @@
 {
   "schema": "LGAE_V3_MANIFEST_V4",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "manifest_excludes": [
     ".gitignore",
     "MANIFEST.sha256.json"
   ],
-  "file_count": 90,
+  "file_count": 97,
   "files": [
     {
       "path": ".github/workflows/ci.yml",
@@ -15,7 +15,7 @@
     {
       "path": "BUILD_REPORT.md",
       "bytes": 9180,
-      "sha256": "7b44032c81131012c1f639468fd41af5672ef3fa7a894f0ce766082a8fe28d59"
+      "sha256": "2aebbf32bba4b249ec2a813cdf6089ab04560b89890c67411016f6b5b21964fe"
     },
     {
       "path": "LICENSE",
@@ -24,8 +24,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 25418,
-      "sha256": "3afea75c66a2208b5c2e135ff79a14e4dee5828f4fccc5efe63d2e980e19a53e"
+      "bytes": 27457,
+      "sha256": "015375e7498955ed0104b797d58eae216b42edd01a3e89e604260fb5b6fc848a"
     },
     {
       "path": "configs/default.yaml",
@@ -70,7 +70,7 @@
     {
       "path": "pyproject.toml",
       "bytes": 883,
-      "sha256": "4af55468ce01460ce999c33649fbc63d7c94af1df2f32766e59b8f8f96da90b7"
+      "sha256": "3fc4ded906bac2b39ca05bdfea18dba713a95a75fa0c9a0e408fee61741a5c21"
     },
     {
       "path": "qualification_report.json",
@@ -80,7 +80,7 @@
     {
       "path": "release_verification.json",
       "bytes": 1066,
-      "sha256": "4e14de4a6d9132f01c16589818ef22799d8aaaa6246fe6c73a8ed28060bdeffc"
+      "sha256": "fa321fa06758b01cc1c1c800c49f35b862fbe7128ed028e01c5f8f21cf5db328"
     },
     {
       "path": "requirements-verified.txt",
@@ -105,7 +105,7 @@
     {
       "path": "scripts/generate_manifest.py",
       "bytes": 5314,
-      "sha256": "438543acdd871f2f55e7d1dd5431d7bd6a98a4df7a35d1c653e359da0aecb7ca"
+      "sha256": "bfcad1398e06869394ada79a7a983586e2e3ab756eb3e673c43a4b384e1f85ab"
     },
     {
       "path": "scripts/qualify.py",
@@ -114,8 +114,13 @@
     },
     {
       "path": "src/lgae_v3/__init__.py",
-      "bytes": 2567,
-      "sha256": "df6a449be33d663fc12f72a3de8525f4d7d09b0dc53a52e72bcdc587429190cd"
+      "bytes": 3291,
+      "sha256": "ef3c969451672967e84bc126e937619c552a25fc4c5e40379cb9f524e4bea06d"
+    },
+    {
+      "path": "src/lgae_v3/ann_index.py",
+      "bytes": 11589,
+      "sha256": "7a8c1ba5e7a461bbcc90b1bcbf26d095470aa17e8656bd81f9f2c970e5bee56a"
     },
     {
       "path": "src/lgae_v3/benchmark/__init__.py",
@@ -136,6 +141,11 @@
       "path": "src/lgae_v3/benchmark/tasks.py",
       "bytes": 23001,
       "sha256": "4b0f9d9502ed0d83470ecddc03794a91a87bffdc00c75be01fa713bceeeb344a"
+    },
+    {
+      "path": "src/lgae_v3/causal_edges.py",
+      "bytes": 9707,
+      "sha256": "939dc5a092eeb7979c518cb03f42cc4b496555310713b00f4ba043da92665713"
     },
     {
       "path": "src/lgae_v3/cli.py",
@@ -228,6 +238,11 @@
       "sha256": "765ddd52eaa9d8136bb6b4d2aef0a414cf7574bb78c5af6374d4f52e5671f5c6"
     },
     {
+      "path": "src/lgae_v3/dynamic_gauge.py",
+      "bytes": 10047,
+      "sha256": "f45873deeda497e443ba45fdfd7f4dfb222bbbab2b74f56aef259751625ba985"
+    },
+    {
       "path": "src/lgae_v3/evolution.py",
       "bytes": 42608,
       "sha256": "0af4e6848e27781bfffb00064815b654745eb63008489e85df7a094ce16eca6b"
@@ -246,6 +261,11 @@
       "path": "src/lgae_v3/governor.py",
       "bytes": 36707,
       "sha256": "7cb8e5f711e5e66caede8c2c26f5dc1634bd67e026c7e0b522af990eeb129555"
+    },
+    {
+      "path": "src/lgae_v3/hypergraph.py",
+      "bytes": 9506,
+      "sha256": "5fb82a7eea4752de23006248d6ff7b4257ef4661996ee31426cd7b0e865625bb"
     },
     {
       "path": "src/lgae_v3/kernels.py",
@@ -278,9 +298,19 @@
       "sha256": "e6c2c62d9e27ca89574e6a56b1594221713f9daf67f1b3b10b1547a7320bf6ff"
     },
     {
+      "path": "src/lgae_v3/sheaf_diffusion.py",
+      "bytes": 5921,
+      "sha256": "c2f3454b77f5a21020708970f7a77ef2e9dd222d3cae6aa2bd932990c1943671"
+    },
+    {
       "path": "src/lgae_v3/structural_loop.py",
       "bytes": 9403,
       "sha256": "751136f8e8d5d3ed8cb6e6a857b44575c10aaaebac35fa699d031ac44f964876"
+    },
+    {
+      "path": "src/lgae_v3/timescales.py",
+      "bytes": 6439,
+      "sha256": "16913ed111faab431b65d74d4e6c9f03d10c4108069a9fec7f6cb56ba0425f5a"
     },
     {
       "path": "src/lgae_v3/topology.py",
@@ -325,7 +355,7 @@
     {
       "path": "src/lgae_v3/version.py",
       "bytes": 523,
-      "sha256": "efbf22beab8190eee0b95de31508755cb38bf5bc4931500cba0abad7f2d9c3e7"
+      "sha256": "8327ec3ae51a63e7ed2fd515e40c4d51644cfb24ae72958ad0c50f83bde67701"
     },
     {
       "path": "tests/test_authority_persistence.py",
@@ -345,7 +375,7 @@
     {
       "path": "tests/test_engine.py",
       "bytes": 1733,
-      "sha256": "ae430227ba40c1517fa004d9be4953a72f48d52189387c31bb96599a318fd122"
+      "sha256": "b353e67fd9f48ec41739b10029a409ad893bb96b9a34e2a4e5a4588185a92944"
     },
     {
       "path": "tests/test_entropic.py",
@@ -425,7 +455,7 @@
     {
       "path": "tests/test_v411_integrity.py",
       "bytes": 17672,
-      "sha256": "84de089360ae8ded1f1ec838361c19f3295193d781247e80525cd00bba1f0236"
+      "sha256": "8601734bc5335f6e6bd47ec30714ddab48a492cc9c6f31a07095b5b02ef35de2"
     },
     {
       "path": "tests/test_v412_adversarial.py",
@@ -456,6 +486,11 @@
       "path": "tests/test_v50_structural_learning.py",
       "bytes": 21473,
       "sha256": "f40959be864bd080c34925464e8c0100b5f6f3aacd34495b1fd9a2144eba18e1"
+    },
+    {
+      "path": "tests/test_v51_modules.py",
+      "bytes": 18621,
+      "sha256": "289087d46f160d662d7725d4fed64ed0763079567f9fbbf5fcac79c814c43b32"
     }
   ]
 }

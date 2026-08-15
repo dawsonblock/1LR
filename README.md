@@ -1,6 +1,6 @@
 <div align="center">
 
-# LGAE-v5.0.0 / 1LR: Governed Adaptive Geometry Engine
+# LGAE-v5.1.0 / 1LR: Governed Adaptive Geometry Engine
 
 **A Multi-Timescale Geometric Controller for Self-Evolving Graph and Fiber-Bundle Latent Spaces**
 
@@ -18,6 +18,22 @@
 ## Overview
 
 **LGAE-v4.1 (`1LR`)** is a hardened geometric deep learning engine and dynamical controller. It operates over graph-structured data and continuous fiber bundles, combining continuous field diffusion, Lie-algebra gauge connections, discrete Ricci-flow surgery, and multi-operator curvature diagnostics.
+
+### v5.1.0 — Advanced Structural Modules
+
+Six new modules extending the structural learning loop with richer geometry, causality, and higher-order relationships:
+
+1. **Dynamic gauge connections** (`dynamic_gauge.py`): Context-conditioned SO(d) transport where `U_ij = exp(skew(f_θ(z_i, z_j, c_t)))`. Connection matrices adapt to latent states and task context, enabling richer message passing than static edges. Includes `DynamicGaugeBank`, `StaticGaugeAdapter` for backward compatibility, and `gauge_alignment_loss`.
+
+2. **Multi-timescale adaptation** (`timescales.py`): Separates adaptation into fast (every step: gauge, gates), medium (every ~100: affinity, fibers), and slow (every ~1000: length, topology) timescales. Prevents mutual drift between representation and structure learning. Enforces minimum convergence before slower timescales activate.
+
+3. **Sheaf-adjacency diffusion** (`sheaf_diffusion.py`): Replaces pure Laplacian diffusion with sheaf-adjacency form plus normalization and gating. Avoids suppressing useful disagreement signals at depth. Includes `agreement_gate` for selective message passing and `compare_diffusion_methods` for empirical selection.
+
+4. **ANN-backed neighbor index** (`ann_index.py`): Approximate nearest neighbor backend with FAISS or pure-numpy HNSW fallback. Pipeline: latent Z → ANN index → 96 candidates → exact reranking → 32 final neighbors. Includes `measure_recall` for Recall@k qualification and index refresh policies.
+
+5. **Causal edge semantics** (`causal_edges.py`): Distinguishes association edges from causal edges. Supports do-interventions, counterfactual reasoning, and causal path analysis. Includes temporal Granger-style causality inference from latent history.
+
+6. **Hypergraph / higher-order relationships** (`hypergraph.py`): Extends the graph to hyperedges connecting 3+ nodes. Captures relationships that cannot be decomposed into pairwise interactions. Includes clique expansion and star expansion for spectral analysis, and hypergraph Laplacian diffusion.
 
 ### v5.0.0 — Structural Learning Loop
 
@@ -397,7 +413,7 @@ python scripts/generate_manifest.py --check   # verify manifest
 │   ├── operators.py          # Actuation & diagnostic Markov operators
 │   ├── receipts.py           # Cryptographic receipt logging
 │   └── topology.py           # NetworkX conversion, Betti numbers & PH
-└── tests/                    # 27 test modules with 448 verified unit/regression tests
+└── tests/                    # 27 test modules with 492 verified unit/regression tests
 ```
 
 ---

@@ -46,6 +46,27 @@ from .counterfactual import (
 from .structural_loop import (
     StructuralLearningLoop, StructuralLoopResult,
 )
+from .dynamic_gauge import (
+    DynamicGaugeNetwork, DynamicGaugeBank, StaticGaugeAdapter,
+    gauge_transport, gauge_alignment_loss,
+)
+from .timescales import (
+    Timescale, TimescaleSchedule, AdaptationState, MultiTimescaleController,
+)
+from .sheaf_diffusion import (
+    sheaf_laplacian_diffusion, sheaf_adjacency_diffusion,
+    gated_sheaf_diffusion, agreement_gate, compare_diffusion_methods,
+)
+from .ann_index import (
+    ANNNeighborIndex, FAISSIndex, HNSWIndexNumpy,
+)
+from .causal_edges import (
+    EdgeSemantics, CausalEdge, CausalEdgeRegistry, infer_causality_from_temporal,
+)
+from .hypergraph import (
+    Hyperedge, HypergraphBuffers, hypergraph_laplacian_diffusion,
+    clique_expansion, star_expansion,
+)
 
 __all__ = [
     "LGAEConfig", "load_config", "config_structural_hash", "config_governance_hash",
